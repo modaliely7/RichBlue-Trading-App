@@ -49,7 +49,7 @@ def unrealized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date, 
             # no market price available for this symbol — skip
             continue
         qty = float(t.position_size or 0.0)
-        entry_cost = float((t.entry_price or 0.0) * qty)
+        entry_cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
         mv = float(px * qty)
         upnl = mv - entry_cost
         total += float(upnl)
@@ -59,12 +59,17 @@ def unrealized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date, 
 def portfolio_value_with_unrealized(trades: Sequence[Trade], txs: Sequence[CashTransaction], as_of_day: date, price_by_symbol: dict) -> float:
     """Return portfolio value including unrealized PnL (liquidation view).
 
-    This uses `net_deposited_through` + `realized_pnl_cumulative_through` + unrealized PnL (from prices).
+    portfolio_value = cash + market_value
+    cash = net_deposited + realized_pnl - open_cost_basis
     """
     net_dep = net_deposited_through(txs, as_of_day)
     realized = realized_pnl_cumulative_through(trades, as_of_day)
-    unreal = unrealized_pnl_cumulative_through(trades, as_of_day, price_by_symbol)
-    return float(net_dep + realized + unreal)
+    cost_basis = open_stocks_cost_basis_for_day(trades, as_of_day)
+    
+    cash = net_dep + realized - cost_basis
+    mv = open_stocks_market_value_for_day(trades, as_of_day, price_by_symbol)
+    
+    return float(cash + mv)
 
 
 def realized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date) -> float:
@@ -127,7 +132,7 @@ def open_stocks_cost_basis_for_day(trades: Sequence[Trade], as_of_day: date) -> 
         if not trade_open_on_day(t, as_of_day):
             continue
         qty = float(t.position_size or 0.0)
-        total += float((t.entry_price or 0.0) * qty)
+        total += float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
     return float(total)
 
 

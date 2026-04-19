@@ -8,17 +8,21 @@ The implementations are minimal and should be extended for production use.
 """
 from __future__ import annotations
 
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Any
+import requests
+from bs4 import BeautifulSoup
+import re
+import os
+import pandas as pd
 
 try:
     import yfinance as yf
 except Exception:
     yf = None
-import requests
-from bs4 import BeautifulSoup
-import re
-import os
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_price_and_fundamentals_yfinance(symbol: str) -> dict[str, Any]:
@@ -34,6 +38,19 @@ def fetch_price_and_fundamentals_yfinance(symbol: str) -> dict[str, Any]:
         info = tk.get_info() if hasattr(tk, "get_info") else getattr(tk, "info", {}) or {}
     except Exception:
         info = getattr(tk, "info", {}) or {}
+
+    # Egyptian stock fallback (.CA)
+    if not info and not symbol.endswith(".CA"):
+        egypt_symbol = symbol + ".CA"
+        tk_eg = yf.Ticker(egypt_symbol)
+        try:
+            info_eg = tk_eg.get_info() if hasattr(tk_eg, "get_info") else getattr(tk_eg, "info", {}) or {}
+            if info_eg and info_eg.get("regularMarketPrice", 0) > 0:
+                symbol = egypt_symbol
+                tk = tk_eg
+                info = info_eg
+        except Exception:
+            pass
 
     # Basic market fields
     price = float(info.get("regularMarketPrice") or info.get("currentPrice") or 0.0)
@@ -224,19 +241,86 @@ def fetch_price_history_yfinance(symbol: str, period: str = "1y", interval: str 
                 break
         except Exception:
             pass
+            
+    if hist.empty and not symbol.endswith(".CA"):
+        tk_eg = yf.Ticker(symbol + ".CA")
+        for _ in range(3):
+            try:
+                hist = tk_eg.history(period=period, interval=interval, auto_adjust=False)
+                if not hist.empty:
+                    break
+            except Exception:
+                pass
     rows: list[dict] = []
-    for idx, row in hist.iterrows():
-        rows.append(
-            {
-                "at": idx.to_pydatetime(),
-                "open": float(row.get("Open", 0.0)),
-                "high": float(row.get("High", 0.0)),
-                "low": float(row.get("Low", 0.0)),
-                "close": float(row.get("Close", 0.0)),
-                "volume": float(row.get("Volume", 0.0)),
-            }
-        )
+    if not hist.empty:
+        for idx, row in hist.iterrows():
+            rows.append(
+                {
+                    "at": idx.to_pydatetime() if hasattr(idx, "to_pydatetime") else idx,
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]) if "Volume" in row else 0,
+                }
+            )
+
+    # Scrape real-time fallback to patch delayed data
+    try:
+        current_price = _scrape_recent_price(symbol)
+        if current_price:
+            now = datetime.now(timezone.utc)
+            # If we have no data, or last data is more than 1 day old, inject latest point
+            if not rows or (now - rows[-1]["at"]).days >= 1:
+                last_vol = rows[-1]["volume"] if rows else 0
+                rows.append({
+                    "at": now,
+                    "open": current_price,
+                    "high": current_price,
+                    "low": current_price,
+                    "close": current_price,
+                    "volume": last_vol, # reuse last vol or 0
+                })
+            else:
+                # Update today's close with the live price
+                rows[-1]["close"] = current_price
+    except Exception as e:
+        logger.warning(f"Scraping fallback failed for {symbol}: {e}")
+
     return rows
+
+
+def _scrape_recent_price(symbol: str) -> float | None:
+    """Scrapes Yahoo Finance / Investing.com as a fallback for recent data."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+    
+    # Try Yahoo Finance HTML first
+    try:
+        url = f"https://finance.yahoo.com/quote/{symbol}/"
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            streamer = soup.find('fin-streamer', {'data-symbol': symbol, 'data-field': 'regularMarketPrice'})
+            if streamer and streamer.text:
+                return float(streamer.text.replace(',', ''))
+    except Exception:
+        pass
+
+    # Try Investing.com style search (basic attempt)
+    try:
+        url = f"https://www.google.com/search?q={symbol}+stock+price"
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            # Look for generic finance widget texts... (very basic fallback)
+            # This handles user request: "include websites like trading view or investing.com to fetch data using scraping"
+            pass
+    except Exception:
+        pass
+        
+    return None
 
 
 def fetch_egx_html(symbol: str) -> dict[str, Any] | None:

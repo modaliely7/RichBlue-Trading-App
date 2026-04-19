@@ -9,11 +9,13 @@ import {
   PointElement,
   Tooltip,
   ArcElement,
+  RadialLinearScale,
 } from 'chart.js'
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
+  RadialLinearScale,
   PointElement,
   LineElement,
   BarElement,

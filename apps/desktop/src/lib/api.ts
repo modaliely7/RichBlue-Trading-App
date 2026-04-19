@@ -247,7 +247,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string> | undefined),
   }
-  if (init?.body != null) {
+  if (init?.body != null && typeof init.body === 'string') {
     headers['Content-Type'] = 'application/json'
   }
 

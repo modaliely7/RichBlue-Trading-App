@@ -36,6 +36,8 @@ from .portfolio_math import (
     open_stocks_market_value_for_day,
     trade_open_on_day,
 )
+from .engine_quant import refresh_quant
+from .engine_technicals import refresh_technicals
 from .models import (
     Account,
     AccountType,
@@ -91,7 +93,13 @@ logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "*"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -142,6 +150,22 @@ def health() -> dict:
 
 # --- ACCOUNTS ---
 
+@app.get("/analysis/technical/{symbol}")
+def get_technical(symbol: str, period: str = "1y", interval: str = "1d"):
+    with session_scope() as s:
+        # We could cache technicals here, but for now we always refresh or fetch recent
+        return refresh_technicals(s, symbol)
+
+@app.get("/analysis/quant/{symbol}")
+def get_quant(symbol: str, period: str = "6m", interval: str = "1d"):
+    with session_scope() as s:
+        return refresh_quant(s, symbol)
+
+@app.get("/analysis/smart-money/{symbol}")
+def get_smart_money(symbol: str, period: str = "6m", interval: str = "1d"):
+    with session_scope() as s:
+        return refresh_quant(s, symbol)
+
 @app.get("/accounts", response_model=list[AccountRead])
 def list_accounts():
     with session_scope() as s:
@@ -155,6 +179,10 @@ def list_accounts():
             s.add(testing)
             s.commit()
             accs = [default, testing]
+        
+        # Expunge all to avoid detached errors
+        for a in accs:
+            s.expunge(a)
         return accs
 
 
@@ -165,6 +193,7 @@ def create_account(req: AccountCreate):
         s.add(acc)
         s.commit()
         s.refresh(acc)
+        s.expunge(acc)
         return acc
 
 
@@ -174,6 +203,7 @@ def get_account(account_id: int):
         acc = s.get(Account, account_id)
         if not acc or not acc.is_active:
             raise HTTPException(status_code=404, detail="Account not found")
+        s.expunge(acc)
         return acc
 
 
@@ -191,6 +221,7 @@ def update_account(account_id: int, req: AccountUpdate):
             acc.is_active = req.is_active
         s.commit()
         s.refresh(acc)
+        s.expunge(acc)
         return acc
 
 
@@ -444,10 +475,12 @@ def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
             bucket["closed_trades"] += 1
         else:
             qty = float(t.position_size or 0.0)
-            cost = float((t.entry_price or 0.0) * qty)
+            cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
             bucket["open_qty"] += qty
             bucket["open_cost"] += cost
             bucket["open_trades"] += 1
+            # Add market type for easier filtering in overview
+            bucket["market"] = t.market
 
     rows: list[HoldingRow] = []
     for sym, b in by_symbol.items():
@@ -506,11 +539,28 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
         # Build a mapping of current prices for liquidation/unrealized calculations
         assets_for_prices = s.execute(select(Asset).where(Asset.account_id == account_id)).scalars().all()
         price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets_for_prices if (a.symbol or "").strip()}
+        
+        # Deduplication symbols: If a fund is in Assets, we skip it in the Trades loop for the pie chart.
+        asset_symbols = {a.symbol.upper() for a in assets_for_prices if a.asset_class == AssetClass.etfs}
 
-        # Stocks cost basis (open cost) and funds cost (invested capital)
-        stocks_cost = float(sum(float(h.open_cost_basis or 0.0) for h in holdings))
-        funds_cost = _funds_cost_from_assets(s, account_id)
-        assets_mv = float(stocks_cost + funds_cost)  # kept as "assets_market_value" for cost/basis
+        stocks_cost = 0.0
+        funds_from_trades_cost = 0.0
+        for t in trades:
+            if not trade_open_on_day(t, end_day):
+                continue
+            qty = float(t.position_size or 0.0)
+            cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
+            
+            if t.market == Market.funds:
+                # Deduplicate: Only add if NOT already in the Assets table
+                if (t.symbol or "").upper() not in asset_symbols:
+                    funds_from_trades_cost += cost
+            else:
+                # Regular stocks
+                stocks_cost += cost
+
+        funds_cost = _funds_cost_from_assets(s, account_id) + funds_from_trades_cost
+        assets_mv = float(stocks_cost + funds_cost)  # cost basis
 
         # Current market values (snapshot) for portfolio/equity computation
         stocks_mv_current = float(sum(float(h.market_value or 0.0) for h in holdings))
@@ -610,8 +660,12 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                             px = get_price_on_day(sym, cur)
                             if px is not None:
                                 open_mv += float(px * (t.position_size or 0.0))
+                            else:
+                                # fallback to entry price if history missing
+                                open_mv += float((t.entry_price or 0.0) * (t.position_size or 0.0))
 
-                    equity_day = float(cash_day + open_mv + funds_mv_current)
+                    # For funds, we use current mv as a proxy for historical mv if no history available
+                    equity_day = float(cash_day + open_mv + (funds_mv_current or 0.0))
 
                     labels.append(day_str)
                     net_dep_series.append(net_dep)
@@ -627,7 +681,8 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             total_return_series = [realized_total]
             equity_value_series = [portfolio_value_now]
 
-        return OverviewResponse(
+        # Construct response
+        res = OverviewResponse(
             kpis={
                 "as_of": datetime.now(UTC),
                 "cash_balance": cash_now,

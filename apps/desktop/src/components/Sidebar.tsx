@@ -1,7 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { useState } from 'react'
 import { useAccount } from './AccountContext'
-import { api } from '../lib/api'
 
 const sections = [
   {
@@ -40,36 +38,17 @@ const sections = [
 ]
 
 export function Sidebar() {
-  const { accounts, currentAccount, setCurrentAccount, refreshAccounts } = useAccount()
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState<'Real' | 'Testing'>('Real')
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const { accounts, currentAccount, setCurrentAccount } = useAccount()
 
-  const handleAddAccount = async () => {
-    if (!newName.trim()) return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      const created = await api.createAccount({ name: newName.trim(), account_type: newType })
-      await refreshAccounts()
-      setCurrentAccount(created)
-      setNewName('')
-      setNewType('Real')
-      setShowAddForm(false)
-    } catch (e: any) {
-      setSaveError(e?.message ?? 'Failed to create account')
-    } finally {
-      setSaving(false)
-    }
-  }
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brandMark">T</div>
+        <div className="brandMark" style={{ color: '#3b82f6' }}>R</div>
         <div className="brandText">
-          <div className="brandTitle">TradeDesk</div>
+          <div className="brandTitle">
+            <span style={{ color: '#3b82f6' }}>Ri</span>
+            <span style={{ color: '#93c5fd' }}>chBlue</span>
+          </div>
           <div className="brandSub">Pro Analytics</div>
         </div>
       </div>
@@ -94,51 +73,6 @@ export function Sidebar() {
             {currentAccount?.account_type}
           </div>
         </div>
-
-        {/* Add Account toggle */}
-        <button
-          type="button"
-          onClick={() => { setShowAddForm(v => !v); setSaveError(null) }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            margin: '6px 12px 0', padding: '4px 8px',
-            background: 'transparent', border: '1px solid rgba(56,189,248,0.25)',
-            borderRadius: 6, color: '#38bdf8', fontSize: 11, cursor: 'pointer',
-            width: 'calc(100% - 24px)',
-          }}
-        >
-          {showAddForm ? '✕ Cancel' : '+ Add Account'}
-        </button>
-
-        {showAddForm && (
-          <div style={{ padding: '8px 12px 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <input
-              placeholder="Account name"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddAccount()}
-              style={{ fontSize: 12, padding: '5px 8px' }}
-            />
-            <select
-              value={newType}
-              onChange={e => setNewType(e.target.value as 'Real' | 'Testing')}
-              style={{ fontSize: 12, padding: '5px 8px' }}
-            >
-              <option value="Real">🔵 Real</option>
-              <option value="Testing">🧪 Testing</option>
-            </select>
-            <button
-              type="button"
-              className="btn"
-              disabled={saving || !newName.trim()}
-              onClick={handleAddAccount}
-              style={{ fontSize: 12, padding: '5px 0' }}
-            >
-              {saving ? 'Saving…' : 'Save Account'}
-            </button>
-            {saveError && <div className="error" style={{ fontSize: 11 }}>{saveError}</div>}
-          </div>
-        )}
       </div>
 
       {sections.map((sec) => (

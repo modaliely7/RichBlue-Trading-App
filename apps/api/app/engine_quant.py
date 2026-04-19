@@ -28,11 +28,14 @@ def refresh_quant(session, symbol: str) -> dict[str, Any]:
     df['typical_price'] = (df['high'] + df['low'] + df['close']) / 3
     df['cum_vol'] = df['volume'].cumsum()
     df['cum_pv'] = (df['typical_price'] * df['volume']).cumsum()
-    df['vwap'] = df['cum_pv'] / df['cum_vol']
+    
+    # Avoid zero division
+    cum_vol_safe = df['cum_vol'].replace(0, 1)
+    df['vwap'] = df['cum_pv'] / cum_vol_safe
 
     # Relative Volume (RVOL)
     # Average volume over the last 20 days
-    df['vol_sma'] = df['volume'].rolling(window=20).mean()
+    df['vol_sma'] = df['volume'].rolling(window=20).mean().replace(0, 1)
     df['rvol'] = df['volume'] / df['vol_sma']
 
     # Accumulation / Distribution (A/D)
