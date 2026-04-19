@@ -121,6 +121,7 @@ export function PsychologyPage() {
               disabled={createMutation.isPending}
               onClick={() =>
                 createMutation.mutate({
+                  account_id: currentAccount?.id ?? 1,
                   state,
                   intensity,
                   at: new Date(atLocal).toISOString(),

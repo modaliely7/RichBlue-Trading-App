@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
-import { api, type Account, type AccountCreate } from '../lib/api'
+import { api } from '../lib/api'
 import { useAccount } from '../components/AccountContext'
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -23,11 +23,9 @@ export function SettingsPage() {
   // Account Management State
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState<'Real' | 'Testing'>('Real')
 
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState<'Real' | 'Testing'>('Real')
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'default'
@@ -113,14 +111,20 @@ export function SettingsPage() {
       </div>
 
       <div className="card panel" style={{ marginBottom: 16 }}>
-        <div className="panelTitle">Account management</div>
-        <div className="tableWrap" style={{ marginTop: 10 }}>
-          <table className="table">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div className="panelTitle">Account management</div>
+          {!isAddingAccount && accounts.length < 5 && (
+            <button className="btn btnGhost" style={{ padding: '4px 8px', fontSize: '0.85rem' }} onClick={() => setIsAddingAccount(true)}>+ Add Account</button>
+          )}
+          {accounts.length >= 5 && <span className="muted" style={{ fontSize: '0.8rem' }}>Limit reached (5)</span>}
+        </div>
+
+        <div className="tableWrap">
+          <table className="table tableCompact">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Actions</th>
+                <th>Account Name</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -134,35 +138,26 @@ export function SettingsPage() {
                           type="text"
                           value={editName}
                           onChange={e => setEditName(e.target.value)}
-                          style={{ padding: 4, width: '100%' }}
+                          style={{ padding: '2px 6px', width: '100%' }}
+                          autoFocus
                         />
                       ) : (
-                        acc.name
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {acc.name}
+                          {acc.is_main && <span style={{ fontSize: '0.7rem', padding: '1px 4px', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 4, fontWeight: 600 }}>MAIN</span>}
+                        </div>
                       )}
                     </td>
                     <td>
-                      {isEditing ? (
-                        <select
-                          value={editType}
-                          onChange={e => setEditType(e.target.value as any)}
-                          style={{ padding: 4 }}
-                        >
-                          <option value="Real">Real</option>
-                          <option value="Testing">Testing</option>
-                        </select>
-                      ) : (
-                        acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1)
-                      )}
-                    </td>
-                    <td>
-                      <div className="detailsActions" style={{ marginTop: 0 }}>
+                      <div className="detailsActions" style={{ marginTop: 0, justifyContent: 'flex-end', gap: 4 }}>
                         {isEditing ? (
                           <>
                             <button
                               className="btn btnGhost"
+                              style={{ padding: '2px 8px' }}
                               onClick={async () => {
                                 try {
-                                  await api.updateAccount(acc.id, { name: editName, account_type: editType })
+                                  await api.updateAccount(acc.id, { name: editName })
                                   await refreshAccounts()
                                   setEditingAccountId(null)
                                   setMessage('Account updated.')
@@ -173,23 +168,25 @@ export function SettingsPage() {
                             >
                               Save
                             </button>
-                            <button className="btn btnGhost" onClick={() => setEditingAccountId(null)}>Cancel</button>
+                            <button className="btn btnGhost" style={{ padding: '2px 8px' }} onClick={() => setEditingAccountId(null)}>Cancel</button>
                           </>
                         ) : (
                           <>
                             <button
                               className="btn btnGhost"
+                              style={{ padding: '2px 8px' }}
                               onClick={() => {
                                 setEditingAccountId(acc.id)
                                 setEditName(acc.name)
-                                setEditType(acc.account_type)
                               }}
                             >
                               Edit
                             </button>
                             <button
                               className="btn btnGhost"
-                              style={{ color: '#ef4444' }}
+                              style={{ padding: '2px 8px', color: acc.is_main ? '#9ca3af' : '#ef4444', opacity: acc.is_main ? 0.5 : 1 }}
+                              disabled={acc.is_main}
+                              title={acc.is_main ? "Cannot delete the main account" : "Delete account"}
                               onClick={async () => {
                                 const ok = window.confirm(`Delete account "${acc.name}"? This deletes all its data!`)
                                 if (ok) {
@@ -220,27 +217,19 @@ export function SettingsPage() {
                       placeholder="Account Name"
                       value={newName}
                       onChange={e => setNewName(e.target.value)}
-                      style={{ padding: 4, width: '100%' }}
+                      style={{ padding: '2px 6px', width: '100%' }}
+                      autoFocus
                     />
                   </td>
                   <td>
-                    <select
-                      value={newType}
-                      onChange={e => setNewType(e.target.value as any)}
-                      style={{ padding: 4 }}
-                    >
-                      <option value="Real">Real</option>
-                      <option value="Testing">Testing</option>
-                    </select>
-                  </td>
-                  <td>
-                    <div className="detailsActions" style={{ marginTop: 0 }}>
+                    <div className="detailsActions" style={{ marginTop: 0, justifyContent: 'flex-end', gap: 4 }}>
                       <button
                         className="btn btnGhost"
+                        style={{ padding: '2px 8px' }}
                         onClick={async () => {
                           if (!newName.trim()) return
                           try {
-                            await api.createAccount({ name: newName, account_type: newType })
+                            await api.createAccount({ name: newName, is_main: false, is_active: true })
                             await refreshAccounts()
                             setIsAddingAccount(false)
                             setNewName('')
@@ -252,7 +241,7 @@ export function SettingsPage() {
                       >
                         Save
                       </button>
-                      <button className="btn btnGhost" onClick={() => setIsAddingAccount(false)}>Cancel</button>
+                      <button className="btn btnGhost" style={{ padding: '2px 8px' }} onClick={() => setIsAddingAccount(false)}>Cancel</button>
                     </div>
                   </td>
                 </tr>
@@ -260,11 +249,6 @@ export function SettingsPage() {
             </tbody>
           </table>
         </div>
-        {!isAddingAccount && (
-          <div style={{ marginTop: 12 }}>
-            <button className="btn btnGhost" onClick={() => setIsAddingAccount(true)}>+ Add Account</button>
-          </div>
-        )}
       </div>
 
       <div className="card panel" style={{ marginBottom: 16 }}>

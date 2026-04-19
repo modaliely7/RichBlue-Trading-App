@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type OverviewResponse } from '../lib/api'
+import { useAccount } from './AccountContext'
 
 export function OverviewSyncBar() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
   const { data: ov, isFetching } = useQuery<OverviewResponse>({
-    queryKey: ['overview'],
-    queryFn: () => api.overview(),
+    queryKey: ['overview', currentAccount?.id],
+    queryFn: () => api.overview(currentAccount?.id ?? 1),
   })
 
   return (
@@ -18,7 +20,7 @@ export function OverviewSyncBar() {
         type="button"
         className="btn btnGhost"
         disabled={isFetching}
-        onClick={() => void qc.invalidateQueries({ queryKey: ['overview'] })}
+        onClick={() => void qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })}
       >
         {isFetching ? 'Refreshing…' : 'Refresh'}
       </button>

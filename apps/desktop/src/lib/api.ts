@@ -3,12 +3,11 @@ export type TradeType = 'Long' | 'Short'
 
 export type PsychologyState = 'Confident' | 'Fear' | 'FOMO' | 'Calm' | 'Overtrading'
 
-export type AccountType = 'Real' | 'Testing'
-
 export type Account = {
   id: number
   name: string
-  account_type: AccountType
+  is_main: boolean
+  is_active: boolean
   created_at: string
 }
 
@@ -16,6 +15,7 @@ export type AccountCreate = Omit<Account, 'id' | 'created_at'>
 
 export type PsychologyEntry = {
   id: number
+  account_id: number
   state: PsychologyState
   intensity: number
   at: string
@@ -73,6 +73,7 @@ export type AssetClass = 'Stocks' | 'ETFs / Funds' | 'Crypto' | 'Cash'
 
 export type Asset = {
   id: number
+  account_id: number
   symbol: string
   asset_class: AssetClass
   quantity: number
@@ -105,6 +106,7 @@ export type HoldingRow = {
   open_trades: number
   current_price: number | null
   market_value: number | null
+  market: Market | null
   unrealized_pnl: number | null
 }
 
@@ -148,6 +150,7 @@ export type LessonCategory = 'Mistake' | 'Lesson' | 'Psychological note' | 'Stra
 
 export type Lesson = {
   id: number
+  account_id: number
   title: string
   category: LessonCategory
   tags: string | null
@@ -307,7 +310,7 @@ export const api = {
   listAccounts: () => apiFetch<Account[]>('/accounts'),
   createAccount: (payload: AccountCreate) => apiFetch<Account>('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
   getAccount: (id: number) => apiFetch<Account>(`/accounts/${id}`),
-  updateAccount: (id: number, payload: Partial<AccountCreate>) => apiFetch<Account>(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  updateAccount: (id: number, payload: Partial<AccountCreate> & { is_active?: boolean }) => apiFetch<Account>(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteAccount: (id: number) => apiFetch<{ deleted: true }>(`/accounts/${id}`, { method: 'DELETE' }),
 
   listTrades: (accountId: number = 1) => apiFetch<Trade[]>(`/trades?account_id=${accountId}`),
@@ -330,7 +333,7 @@ export const api = {
   deletePsychology: (id: number) => apiFetch<{ deleted: true }>(`/psychology/${id}`, { method: 'DELETE' }),
   psychologySummary: (accountId: number = 1) => apiFetch<PsychologySummaryRow[]>(`/psychology/summary?account_id=${accountId}`),
 
-  insights: () => apiFetch<InsightsResponse>('/insights'),
+  insights: (accountId: number = 1) => apiFetch<InsightsResponse>(`/insights?account_id=${accountId}`),
   performanceAnalytics: (params: { start?: string; end?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
     if (params.start) q.set('start', params.start)
@@ -340,7 +343,7 @@ export const api = {
     return apiFetch<PerformanceAnalyticsResponse>(`/performance/analytics${suffix}`)
   },
 
-  listAssets: () => apiFetch<Asset[]>('/assets'),
+  listAssets: (accountId: number = 1) => apiFetch<Asset[]>(`/assets?account_id=${accountId}`),
   createAsset: (payload: AssetCreate) => apiFetch<Asset>('/assets', { method: 'POST', body: JSON.stringify(payload) }),
   updateAsset: (id: number, payload: AssetUpdate) =>
     apiFetch<Asset>(`/assets/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
@@ -351,8 +354,9 @@ export const api = {
   quantIndicators: (file: File, query: Record<string, string | number> = {}) =>
     uploadFileWithQuery<QuantIndicatorsResponse>('/quant/indicators', file, query),
 
-  listLessons: (params: { q?: string; category?: string } = {}) => {
+  listLessons: (accountId: number = 1, params: { q?: string; category?: string } = {}) => {
     const q = new URLSearchParams()
+    q.set('account_id', String(accountId))
     if (params.q) q.set('q', params.q)
     if (params.category) q.set('category', params.category)
     const suffix = q.toString() ? `?${q.toString()}` : ''

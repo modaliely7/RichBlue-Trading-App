@@ -23,17 +23,12 @@ class TradeType(str, enum.Enum):
     short = "Short"
 
 
-class AccountType(str, enum.Enum):
-    real = "Real"
-    testing = "Testing"
-
-
 class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    account_type: Mapped[AccountType] = mapped_column(Enum(AccountType), default=AccountType.real)
+    is_main: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -233,6 +228,7 @@ class Lesson(Base):
     __tablename__ = "lessons"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
 
     title: Mapped[str] = mapped_column(String(140), index=True)
     category: Mapped[LessonCategory] = mapped_column(Enum(LessonCategory), index=True)

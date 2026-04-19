@@ -65,12 +65,12 @@ export function Sidebar() {
           >
             {accounts.map(acc => (
               <option key={acc.id} value={acc.id}>
-                {acc.account_type === 'Real' ? '🔵' : '🧪'} {acc.name}
+                {acc.is_main ? '⭐' : '📁'} {acc.name}
               </option>
             ))}
           </select>
           <div className="accountType">
-            {currentAccount?.account_type}
+            {currentAccount?.is_main ? 'Main Account' : 'Account'}
           </div>
         </div>
       </div>

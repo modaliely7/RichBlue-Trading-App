@@ -4,12 +4,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, TradeType, AccountType
+from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, TradeType
 
 
 class AccountBase(BaseModel):
     name: str = Field(min_length=1, max_length=64)
-    account_type: AccountType = AccountType.real
 
 
 class AccountCreate(AccountBase):
@@ -18,12 +17,12 @@ class AccountCreate(AccountBase):
 
 class AccountUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
-    account_type: AccountType | None = None
     is_active: bool | None = None
 
 
 class AccountRead(AccountBase):
     id: int
+    is_main: bool
     is_active: bool
     created_at: datetime
 
@@ -89,6 +88,7 @@ class TradeRead(TradeBase):
 
 
 class PsychologyBase(BaseModel):
+    account_id: int = 1
     state: PsychologyState
     intensity: int = Field(default=3, ge=1, le=5)
     at: datetime
@@ -110,6 +110,7 @@ class PsychologyUpdate(BaseModel):
 
 class PsychologyRead(PsychologyBase):
     id: int
+    account_id: int
 
 
 class PsychologySummaryRow(BaseModel):
@@ -120,6 +121,7 @@ class PsychologySummaryRow(BaseModel):
 
 
 class AssetBase(BaseModel):
+    account_id: int = 1
     symbol: str = Field(min_length=1, max_length=32)
     asset_class: AssetClass
     quantity: float = 0.0
@@ -145,6 +147,7 @@ class AssetUpdate(BaseModel):
 
 class AssetRead(AssetBase):
     id: int
+    account_id: int
     market_value: float
     cost_basis: float
     unrealized_pnl: float
@@ -166,6 +169,7 @@ class HoldingRow(BaseModel):
     open_trades: int
     current_price: float | None = None
     market_value: float | None = None
+    market: Market | None = None
     unrealized_pnl: float | None = None
     unrealized_pnl_pct: float | None = None
 
@@ -213,7 +217,7 @@ class LessonBase(BaseModel):
 
 
 class LessonCreate(LessonBase):
-    pass
+    account_id: int = 1
 
 
 class LessonUpdate(BaseModel):
@@ -227,6 +231,7 @@ class LessonUpdate(BaseModel):
 
 class LessonRead(LessonBase):
     id: int
+    account_id: int
 
 
 class CashTxBase(BaseModel):

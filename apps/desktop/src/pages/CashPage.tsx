@@ -3,22 +3,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { formatCurrency } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 export function CashPage() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
   const { data: balanceRes, isLoading: balanceLoading } = useQuery({
-    queryKey: ['cashBalance'],
-    queryFn: () => api.cashBalance()
+    queryKey: ['cashBalance', currentAccount?.id],
+    queryFn: () => api.cashBalance(currentAccount?.id ?? 1)
   })
 
   const { data: txs, isLoading: txsLoading } = useQuery({
-    queryKey: ['cashTransactions'],
-    queryFn: () => api.cashTransactions()
+    queryKey: ['cashTransactions', currentAccount?.id],
+    queryFn: () => api.cashTransactions(currentAccount?.id ?? 1)
   })
 
   const [depositAmount, setDepositAmount] = useState('')
-  const [withdrawAmount, setWithdrawAmount] = useState('')
-  const [adjustAmount, setAdjustAmount] = useState('')
 
   const [editingTxId, setEditingTxId] = useState<number | null>(null)
   const [editAmount, setEditAmount] = useState('')
@@ -29,38 +29,38 @@ export function CashPage() {
   const [editNote, setEditNote] = useState('')
 
   const depositMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashDeposit(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashDeposit(payload, currentAccount?.id ?? 1),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       ])
       setDepositAmount('')
     }
   })
 
   const withdrawMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashWithdraw(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashWithdraw(payload, currentAccount?.id ?? 1),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       ])
-      setWithdrawAmount('')
+      setDepositAmount('')
     }
   })
 
   const adjustMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashAdjust(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashAdjust(payload, currentAccount?.id ?? 1),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       ])
-      setAdjustAmount('')
+      setDepositAmount('')
     }
   })
 
@@ -68,9 +68,9 @@ export function CashPage() {
     mutationFn: api.deleteCashTransaction,
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       ])
     },
     onError: (e) => {
@@ -83,9 +83,9 @@ export function CashPage() {
       api.updateCashTransaction(payload.id, { amount: payload.amount, at: payload.at, note: payload.note }),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       ])
       setEditingTxId(null)
     },
@@ -130,8 +130,6 @@ export function CashPage() {
                 value={depositAmount}
                 onChange={e => {
                   setDepositAmount(e.target.value)
-                  setWithdrawAmount(e.target.value)
-                  setAdjustAmount(e.target.value)
                 }}
               />
             </label>

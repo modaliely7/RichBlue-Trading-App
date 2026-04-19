@@ -107,7 +107,7 @@ def ledger_balance_through(txs: Sequence[CashTransaction], as_of_day: date) -> f
 def net_deposited_through(txs: Sequence[CashTransaction], as_of_day: date) -> float:
     total = 0.0
     for tx in txs:
-        if tx.tx_type not in {CashTxType.deposit, CashTxType.withdraw}:
+        if tx.tx_type not in {CashTxType.deposit, CashTxType.withdraw, CashTxType.adjustment}:
             continue
         if tx_calendar_day(tx.at) <= as_of_day:
             total += float(tx.amount or 0.0)
@@ -150,12 +150,12 @@ def open_stocks_market_value_for_day(trades: Sequence[Trade], as_of_day: date, p
         if not sym:
             continue
         px = price_by_symbol.get(sym)
-        if px is None:
-            # no market price available for this symbol — skip
-            continue
         qty = float(t.position_size or 0.0)
-        mv = float(px * qty)
-        total += mv
+        if px is not None:
+            total += float(px * qty)
+        else:
+            # no market price available — fallback to entry price (cost basis)
+            total += float((t.entry_price or 0.0) * qty)
     return float(total)
 
 

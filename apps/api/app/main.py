@@ -40,7 +40,6 @@ from .engine_quant import refresh_quant
 from .engine_technicals import refresh_technicals
 from .models import (
     Account,
-    AccountType,
     Asset,
     AssetClass,
     Base,
@@ -172,13 +171,10 @@ def list_accounts():
         # Ensure at least one account exists
         accs = s.execute(select(Account).where(Account.is_active == True)).scalars().all()
         if not accs:
-            default = Account(name="Real Account", account_type=AccountType.real, is_active=True)
+            default = Account(name="Main Account", is_main=True, is_active=True)
             s.add(default)
-            s.flush()
-            testing = Account(name="Testing Account", account_type=AccountType.testing, is_active=True)
-            s.add(testing)
             s.commit()
-            accs = [default, testing]
+            accs = [default]
         
         # Expunge all to avoid detached errors
         for a in accs:
@@ -189,7 +185,12 @@ def list_accounts():
 @app.post("/accounts", response_model=AccountRead)
 def create_account(req: AccountCreate):
     with session_scope() as s:
-        acc = Account(name=req.name, account_type=req.account_type)
+        # Enforce 5 account limit
+        count = s.execute(select(func.count(Account.id)).where(Account.is_active == True)).scalar()
+        if count >= 5:
+            raise HTTPException(status_code=400, detail="Maximum limit of 5 accounts reached.")
+        
+        acc = Account(name=req.name)
         s.add(acc)
         s.commit()
         s.refresh(acc)
@@ -215,8 +216,6 @@ def update_account(account_id: int, req: AccountUpdate):
             raise HTTPException(status_code=404, detail="Account not found")
         if req.name is not None:
             acc.name = req.name
-        if req.account_type is not None:
-            acc.account_type = req.account_type
         if req.is_active is not None:
             acc.is_active = req.is_active
         s.commit()
@@ -231,6 +230,9 @@ def delete_account(account_id: int):
         acc = s.get(Account, account_id)
         if not acc or not acc.is_active:
             raise HTTPException(status_code=404, detail="Account not found")
+        if acc.is_main:
+            raise HTTPException(status_code=400, detail="Cannot delete the main account.")
+        
         # Soft delete
         acc.is_active = False
         s.commit()
@@ -238,12 +240,12 @@ def delete_account(account_id: int):
 
 
 @app.get("/performance/analytics")
-def performance_analytics(start: str | None = None, end: str | None = None) -> dict:
+def performance_analytics(account_id: int = 1, start: str | None = None, end: str | None = None) -> dict:
     """
     Advanced performance breakdowns from closed trades (uses exit_date when available).
     """
     with session_scope() as s:
-        trades = s.execute(select(Trade)).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
         closed = [t for t in trades if t.exit_price is not None and calc_pnl(t) is not None]
 
         def trade_dt(t: Trade) -> datetime:
@@ -449,7 +451,7 @@ def _add_cash_tx(
 
 def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
     trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
-    assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
+    assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class.in_([AssetClass.stocks, AssetClass.etfs]))).scalars().all()
     price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets if (a.symbol or "").strip()}
 
     by_symbol: dict[str, dict] = {}
@@ -465,6 +467,7 @@ def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
                 "realized": 0.0,
                 "closed_trades": 0,
                 "open_trades": 0,
+                "market": Market.stocks,
             },
         )
 
@@ -479,8 +482,28 @@ def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
             bucket["open_qty"] += qty
             bucket["open_cost"] += cost
             bucket["open_trades"] += 1
-            # Add market type for easier filtering in overview
             bucket["market"] = t.market
+
+    for a in assets:
+        sym = (a.symbol or "").strip().upper()
+        if not sym:
+            continue
+        bucket = by_symbol.setdefault(
+            sym,
+            {
+                "open_qty": 0.0,
+                "open_cost": 0.0,
+                "realized": 0.0,
+                "closed_trades": 0,
+                "open_trades": 0,
+                "market": Market.stocks,
+            },
+        )
+        qty = float(a.quantity or 0.0)
+        cost = qty * float(a.avg_cost or 0.0)
+        bucket["open_qty"] += qty
+        bucket["open_cost"] += cost
+        bucket["market"] = Market.funds if a.asset_class == AssetClass.etfs else Market.stocks
 
     rows: list[HoldingRow] = []
     for sym, b in by_symbol.items():
@@ -510,6 +533,7 @@ def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
                 open_trades=int(b["open_trades"]),
                 current_price=cur_px,
                 market_value=mv,
+                market=b.get("market"),
                 unrealized_pnl=upnl,
                 unrealized_pnl_pct=upnl_pct,
             )
@@ -540,27 +564,40 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
         assets_for_prices = s.execute(select(Asset).where(Asset.account_id == account_id)).scalars().all()
         price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets_for_prices if (a.symbol or "").strip()}
         
-        # Deduplication symbols: If a fund is in Assets, we skip it in the Trades loop for the pie chart.
-        asset_symbols = {a.symbol.upper() for a in assets_for_prices if a.asset_class == AssetClass.etfs}
+        # Deduplication symbols: If an asset is in the Assets table, we prioritize its cost data 
+        # and skip it in the Trades loop to avoid double-counting in the allocation pie chart.
+        asset_symbols_stocks = {(a.symbol or "").strip().upper() for a in assets_for_prices if a.asset_class == AssetClass.stocks}
+        asset_symbols_funds = {(a.symbol or "").strip().upper() for a in assets_for_prices if a.asset_class == AssetClass.etfs}
 
-        stocks_cost = 0.0
+        stocks_from_trades_cost = 0.0
         funds_from_trades_cost = 0.0
         for t in trades:
             if not trade_open_on_day(t, end_day):
                 continue
             qty = float(t.position_size or 0.0)
             cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
+            sym = (t.symbol or "").strip().upper()
             
             if t.market == Market.funds:
-                # Deduplicate: Only add if NOT already in the Assets table
-                if (t.symbol or "").upper() not in asset_symbols:
+                if sym not in asset_symbols_funds:
                     funds_from_trades_cost += cost
             else:
-                # Regular stocks
-                stocks_cost += cost
+                if sym not in asset_symbols_stocks:
+                    stocks_from_trades_cost += cost
 
-        funds_cost = _funds_cost_from_assets(s, account_id) + funds_from_trades_cost
-        assets_mv = float(stocks_cost + funds_cost)  # cost basis
+        # Add costs from Asset table
+        stocks_from_assets_cost = float(sum(
+            float(a.quantity or 0.0) * float(a.avg_cost or 0.0)
+            for a in assets_for_prices if a.asset_class == AssetClass.stocks
+        ))
+        funds_from_assets_cost = float(sum(
+            float(a.quantity or 0.0) * float(a.avg_cost or 0.0)
+            for a in assets_for_prices if a.asset_class == AssetClass.etfs
+        ))
+        
+        stocks_cost = stocks_from_trades_cost + stocks_from_assets_cost
+        funds_cost = funds_from_assets_cost + funds_from_trades_cost
+        assets_mv = float(stocks_cost + funds_cost)  # total cost basis for pie chart
 
         # Current market values (snapshot) for portfolio/equity computation
         stocks_mv_current = float(sum(float(h.market_value or 0.0) for h in holdings))
@@ -640,38 +677,47 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                 return price_by_symbol.get(sym)
 
             while cur <= end_day:
-                # Skip weekends — markets are closed, no new data
-                if cur.weekday() < 5:  # 0=Mon ... 4=Fri
-                    day_str = cur.strftime("%Y-%m-%d")
+                day_str = cur.strftime("%Y-%m-%d")
 
-                    # 1. Realized metrics
-                    net_dep = net_deposited_through(txs, cur)
-                    real_cum = realized_pnl_cumulative_through(trades, cur)
-                    pv_realized = float(net_dep + real_cum)
+                # 1. Realized metrics
+                net_dep = net_deposited_through(txs, cur)
+                real_cum = realized_pnl_cumulative_through(trades, cur)
+                pv_realized = float(net_dep + real_cum)
 
-                    # 2. Liquidation metrics (Equity)
-                    cash_day = ledger_balance_through(txs, cur)
+                # 2. Liquidation metrics (Equity)
+                cash_day = ledger_balance_through(txs, cur)
 
-                    # Market value of open trades using historical price lookup
-                    open_mv = 0.0
-                    for t in trades:
-                        if trade_open_on_day(t, cur):
-                            sym = (t.symbol or "").strip().upper()
-                            px = get_price_on_day(sym, cur)
-                            if px is not None:
-                                open_mv += float(px * (t.position_size or 0.0))
-                            else:
-                                # fallback to entry price if history missing
-                                open_mv += float((t.entry_price or 0.0) * (t.position_size or 0.0))
+                # Market value of open trades using historical price lookup
+                open_mv = 0.0
+                for t in trades:
+                    if trade_open_on_day(t, cur):
+                        sym = (t.symbol or "").strip().upper()
+                        px = get_price_on_day(sym, cur)
+                        if px is not None:
+                            open_mv += float(px * (t.position_size or 0.0))
+                        else:
+                            # fallback to entry price if history missing
+                            open_mv += float((t.entry_price or 0.0) * (t.position_size or 0.0))
 
-                    # For funds, we use current mv as a proxy for historical mv if no history available
-                    equity_day = float(cash_day + open_mv + (funds_mv_current or 0.0))
+                # Market value of assets from Asset table (best-effort historical)
+                assets_table_mv = 0.0
+                for a in assets_for_prices:
+                    sym = (a.symbol or "").strip().upper()
+                    if sym:
+                        px = get_price_on_day(sym, cur)
+                        if px is not None:
+                            assets_table_mv += float(px * (a.quantity or 0.0))
+                        else:
+                            # fallback to avg cost
+                            assets_table_mv += float((a.avg_cost or 0.0) * (a.quantity or 0.0))
 
-                    labels.append(day_str)
-                    net_dep_series.append(net_dep)
-                    total_return_series.append(real_cum)
-                    portfolio_value_series.append(pv_realized)
-                    equity_value_series.append(equity_day)
+                equity_day = float(cash_day + open_mv + assets_table_mv)
+
+                labels.append(day_str)
+                net_dep_series.append(net_dep)
+                total_return_series.append(real_cum)
+                portfolio_value_series.append(pv_realized)
+                equity_value_series.append(equity_day)
 
                 cur += timedelta(days=1)
         else:
@@ -710,6 +756,7 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                 "portfolio_value_liquidation": equity_value_series,
             },
         )
+        return res
 
 
 @app.get("/cash/balance", response_model=CashBalanceResponse)
@@ -1614,6 +1661,7 @@ def delete_trade_screenshot(trade_id: int) -> TradeRead:
 def _to_psy_read(p: PsychologyEntry) -> PsychologyRead:
     return PsychologyRead(
         id=p.id,
+        account_id=p.account_id,
         state=p.state,
         intensity=p.intensity,
         at=p.at,
@@ -1623,10 +1671,10 @@ def _to_psy_read(p: PsychologyEntry) -> PsychologyRead:
 
 
 @app.get("/psychology", response_model=list[PsychologyRead])
-def list_psychology(limit: int = 200, offset: int = 0) -> list[PsychologyRead]:
+def list_psychology(account_id: int = 1, limit: int = 200, offset: int = 0) -> list[PsychologyRead]:
     with session_scope() as s:
         rows = (
-            s.execute(select(PsychologyEntry).order_by(PsychologyEntry.at.desc()).limit(limit).offset(offset))
+            s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id).order_by(PsychologyEntry.at.desc()).limit(limit).offset(offset))
             .scalars()
             .all()
         )
@@ -1675,9 +1723,9 @@ def delete_psychology(entry_id: int) -> dict:
 
 
 @app.get("/psychology/summary", response_model=list[PsychologySummaryRow])
-def psychology_summary() -> list[PsychologySummaryRow]:
+def psychology_summary(account_id: int = 1) -> list[PsychologySummaryRow]:
     with session_scope() as s:
-        entries = s.execute(select(PsychologyEntry)).scalars().all()
+        entries = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id)).scalars().all()
         if not entries:
             return []
 
@@ -1765,13 +1813,13 @@ def stop_background_scheduler():
 
 
 @app.get("/insights")
-def insights() -> dict:
+def insights(account_id: int = 1) -> dict:
     """
     Lightweight, deterministic "AI coach" insights based on your data.
     Returns: list of insight cards + supporting aggregates.
     """
     with session_scope() as s:
-        trades = s.execute(select(Trade)).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
         closed = [t for t in trades if t.exit_price is not None and calc_pnl(t) is not None]
 
         def pct(n: float) -> float:
@@ -1884,7 +1932,7 @@ def insights() -> dict:
             )
 
         # Psychology (top state by avg pnl)
-        entries = s.execute(select(PsychologyEntry)).scalars().all()
+        entries = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id)).scalars().all()
         if entries:
             trade_ids = {e.trade_id for e in entries if e.trade_id is not None}
             trades_by_id = {}
@@ -1934,6 +1982,7 @@ def insights() -> dict:
 def _to_lesson_read(x: Lesson) -> LessonRead:
     return LessonRead(
         id=x.id,
+        account_id=x.account_id,
         title=x.title,
         category=x.category,
         tags=x.tags,
@@ -1945,9 +1994,9 @@ def _to_lesson_read(x: Lesson) -> LessonRead:
 
 
 @app.get("/lessons", response_model=list[LessonRead])
-def list_lessons(limit: int = 200, offset: int = 0, q: str | None = None, category: LessonCategory | None = None) -> list[LessonRead]:
+def list_lessons(account_id: int = 1, limit: int = 200, offset: int = 0, q: str | None = None, category: LessonCategory | None = None) -> list[LessonRead]:
     with session_scope() as s:
-        stmt = select(Lesson).order_by(Lesson.updated_at.desc()).limit(limit).offset(offset)
+        stmt = select(Lesson).where(Lesson.account_id == account_id).order_by(Lesson.updated_at.desc()).limit(limit).offset(offset)
         # lightweight filters in python for SQLite simplicity
         rows = s.execute(stmt).scalars().all()
         if category is not None:
@@ -2105,6 +2154,7 @@ def _to_asset_read(a: Asset) -> AssetRead:
     pnl_pct = (pnl / cb * 100.0) if cb != 0 else None
     return AssetRead(
         id=a.id,
+        account_id=a.account_id,
         symbol=a.symbol,
         asset_class=a.asset_class,
         quantity=a.quantity,
@@ -2120,9 +2170,9 @@ def _to_asset_read(a: Asset) -> AssetRead:
 
 
 @app.get("/assets", response_model=list[AssetRead])
-def list_assets(limit: int = 500, offset: int = 0) -> list[AssetRead]:
+def list_assets(account_id: int = 1, limit: int = 500, offset: int = 0) -> list[AssetRead]:
     with session_scope() as s:
-        rows = s.execute(select(Asset).order_by(Asset.updated_at.desc()).limit(limit).offset(offset)).scalars().all()
+        rows = s.execute(select(Asset).where(Asset.account_id == account_id).order_by(Asset.updated_at.desc()).limit(limit).offset(offset)).scalars().all()
         return [_to_asset_read(a) for a in rows]
 
 
@@ -2162,9 +2212,11 @@ def delete_asset(asset_id: int) -> dict:
 
 
 @app.get("/portfolio/summary", response_model=PortfolioSummary)
-def portfolio_summary() -> PortfolioSummary:
+def portfolio_summary(account_id: int = 1) -> PortfolioSummary:
     with session_scope() as s:
-        assets = s.execute(select(Asset)).scalars().all()
+        assets = s.execute(select(Asset).where(Asset.account_id == account_id)).scalars().all()
+        # Also need to consider cash and trades for some summary metrics?
+        # Actually PortfolioSummary schema only has total_value and allocation from Assets.
         total = 0.0
         alloc: dict[str, float] = {c.value: 0.0 for c in AssetClass}
         for a in assets:
@@ -2175,13 +2227,13 @@ def portfolio_summary() -> PortfolioSummary:
 
 
 @app.get("/portfolio/holdings", response_model=list[HoldingRow])
-def portfolio_holdings() -> list[HoldingRow]:
+def portfolio_holdings(account_id: int = 1) -> list[HoldingRow]:
     """
     Positions by symbol from logged trades (open quantities/cost, closed realized PnL).
     Current prices come from the Assets table when present (Stocks, matched by symbol).
     """
     with session_scope() as s:
-        return _compute_holdings(s)
+        return _compute_holdings(s, account_id=account_id)
 
 
 # --- New Analysis Endpoints ---

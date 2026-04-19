@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import type { LessonCategory, LessonCreate } from '../lib/api'
+import { useAccount } from '../components/AccountContext'
 
 const CATEGORIES: LessonCategory[] = ['Lesson', 'Mistake', 'Psychological note', 'Strategy insight']
 
@@ -10,13 +11,14 @@ function nowIso() {
 }
 
 export function LessonsPage() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState<LessonCategory | ''>('')
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['lessons', q, category],
-    queryFn: () => api.listLessons({ q: q.trim() || undefined, category: category || undefined }),
+    queryKey: ['lessons', currentAccount?.id, q, category],
+    queryFn: () => api.listLessons(currentAccount?.id ?? 1, { q: q.trim() || undefined, category: category || undefined }),
   })
 
   const [title, setTitle] = useState('Post-trade review')
@@ -27,7 +29,7 @@ export function LessonsPage() {
   const createMutation = useMutation({
     mutationFn: (payload: LessonCreate) => api.createLesson(payload),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['lessons'] })
+      await qc.invalidateQueries({ queryKey: ['lessons', currentAccount?.id] })
       setTitle('Post-trade review')
       setCat('Lesson')
       setTags('')
@@ -38,7 +40,7 @@ export function LessonsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteLesson(id),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['lessons'] })
+      await qc.invalidateQueries({ queryKey: ['lessons', currentAccount?.id] })
     },
   })
 
@@ -83,6 +85,7 @@ export function LessonsPage() {
             disabled={createMutation.isPending}
             onClick={() =>
               createMutation.mutate({
+                account_id: currentAccount?.id ?? 1,
                 title: title.trim(),
                 category: cat,
                 tags: tags.trim() ? tags.trim() : null,

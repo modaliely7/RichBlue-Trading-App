@@ -117,17 +117,31 @@ export function DashboardPage() {
       if (dd > 0 && dd > maxDd) maxDd = dd
     }
 
+    // Monthly P&L (based on chart range, up to 6 months)
     const monthlyMap = new Map<string, number>()
-    for (const t of closedSorted) {
+    const now = new Date()
+    const monthsToShow = chartRange === '1m' ? 1 : chartRange === '3m' ? 3 : 6
+    const monthKeys: string[] = []
+    
+    for (let i = 0; i < monthsToShow; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      monthKeys.unshift(key) // Add to start so they are chronological
+      monthlyMap.set(key, 0)
+    }
+
+    for (const t of closed) {
       const dt = new Date(t.exit_date ?? t.entry_date)
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
-      monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + (t.pnl ?? 0))
+      if (monthlyMap.has(key)) {
+        monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + (t.pnl ?? 0))
+      }
     }
-    const monthlyLabels = Array.from(monthlyMap.keys()).sort()
+    const monthlyLabels = monthKeys
     const monthlyValues = monthlyLabels.map(k => monthlyMap.get(k) ?? 0)
 
     return { total, totalTrades: trades.length, closedTrades: closed.length, winRate, profitFactor, avgWin, avgLoss, monthlyLabels, monthlyValues, sharpe, maxDd }
-  }, [ov])
+  }, [ov, chartRange])
 
   const realizedPnl = Number(ov?.kpis.realized_pnl_total ?? 0)
   const portfolioValue = Number(ov?.kpis.portfolio_value ?? 0) // Realized by default
@@ -305,13 +319,14 @@ export function DashboardPage() {
           {chartFiltered.labels.length === 0
             ? <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>No history yet — add trades and deposits to see the chart.</div>
             : <Line
+              key={chartRange}
               data={{
                 labels: chartFiltered.labels,
                 datasets: [
-                  { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
-                  { label: 'Equity (Liquidation)', data: chartFiltered.portfolio_value_liquidation, borderColor: 'rgba(56,189,248,0.5)', borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.2 },
-                  { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
-                  { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
+                  { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: chartFiltered.labels.length === 1 ? 4 : 0, tension: 0.3 },
+                  { label: 'Equity (Liquidation)', data: chartFiltered.portfolio_value_liquidation, borderColor: 'rgba(56,189,248,0.5)', borderDash: [4, 4], fill: false, pointRadius: chartFiltered.labels.length === 1 ? 4 : 0, tension: 0.2 },
+                  { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: chartFiltered.labels.length === 1 ? 4 : 0, tension: 0.2 },
+                  { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: chartFiltered.labels.length === 1 ? 4 : 0, tension: 0.25 },
                 ],
               }}
               options={{

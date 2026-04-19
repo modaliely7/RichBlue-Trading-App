@@ -56,7 +56,6 @@ export function PortfolioPage() {
 
   const portfolioPie = useMemo(() => {
     const cashVal = metrics.cash
-    const fundsVal = Number(ov?.allocation?.Funds ?? 0)
     const labels: string[] = []
     const values: number[] = []
     if (cashVal > 1e-9) {
@@ -70,15 +69,11 @@ export function PortfolioPage() {
         values.push(v)
       }
     }
-    if (fundsVal > 1e-9) {
-      labels.push('Funds')
-      values.push(fundsVal)
-    }
     const total = values.reduce((a, b) => a + b, 0)
     const pct = total > 0 ? values.map((v) => (v / total) * 100) : []
     const { bg, border } = pieSliceColors(labels.length)
     return { labels, values, pct, total, bg, border }
-  }, [metrics.cash, ov?.allocation?.Funds, openHoldings, method])
+  }, [metrics.cash, openHoldings, method])
 
   return (
     <div className="page">
