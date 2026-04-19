@@ -66,7 +66,7 @@ export function SmartMoneyPage() {
           {/* Banner */}
           <div className={`signalBanner ${tone === 'good' ? 'bullish' : tone === 'bad' ? 'bearish' : ''}`}>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{data.symbol}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-strong)' }}>{data.symbol}</div>
               {data.fetched_at && (
                 <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                   Updated: {new Date(data.fetched_at).toLocaleString()}
@@ -133,7 +133,7 @@ export function SmartMoneyPage() {
               <div style={{ marginTop: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
                   <span className="muted">Breakout Probability</span>
-                  <span style={{ fontWeight: 700, color: (payload.breakout_probability ?? 0) > 60 ? 'var(--accent2)' : '#f8fafc' }}>
+                  <span style={{ fontWeight: 700, color: (payload.breakout_probability ?? 0) > 60 ? 'var(--accent2)' : 'var(--text-strong)' }}>
                     {fmt(payload.breakout_probability, 0)}%
                   </span>
                 </div>
@@ -151,3 +151,4 @@ export function SmartMoneyPage() {
     </div>
   )
 }
+

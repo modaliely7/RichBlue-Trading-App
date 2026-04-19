@@ -108,7 +108,7 @@ export function CashPage() {
       <div className="grid panels">
         <div className="card panel">
           <div className="panelTitle">Available Cash</div>
-          <div style={{ fontSize: 36, fontWeight: 'bold', margin: '10px 0', color: '#f8fafc' }}>
+          <div style={{ fontSize: 36, fontWeight: 'bold', margin: '10px 0', color: 'var(--text-strong)' }}>
             {balanceRes ? formatCurrency(balanceRes.balance) : '—'}
           </div>
           <div className="muted">
@@ -118,53 +118,71 @@ export function CashPage() {
 
         <div className="card panel">
           <div className="panelTitle">Cash Actions</div>
-          <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+          <div className="formGrid" style={{ marginTop: 12 }}>
+            <label>
+              <div className="label">Amount</div>
               <input 
                 type="number" 
-                placeholder="Deposit amount" 
+                placeholder="0.00" 
                 value={depositAmount} 
-                onChange={e => setDepositAmount(e.target.value)} 
+                onChange={e => {
+                  setDepositAmount(e.target.value)
+                  setWithdrawAmount(e.target.value)
+                  setAdjustAmount(e.target.value)
+                }} 
               />
+            </label>
+            <label>
+              <div className="label">Date (optional)</div>
+              <input 
+                type="datetime-local" 
+                value={editDate} 
+                onChange={e => setEditDate(e.target.value)} 
+              />
+            </label>
+            <label className="span2">
+              <div className="label">Note (optional)</div>
+              <input 
+                type="text" 
+                placeholder="Description or reference" 
+                value={editNote} 
+                onChange={e => setEditNote(e.target.value)} 
+              />
+            </label>
+            <div className="detailsActions span2" style={{ marginTop: 8 }}>
               <button 
                 className="btn" 
                 disabled={!depositAmount || depositMutation.isPending}
-                onClick={() => depositMutation.mutate({ amount: parseFloat(depositAmount) })}
+                onClick={() => {
+                  depositMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
+                  setEditDate('')
+                  setEditNote('')
+                }}
               >
                 Deposit
               </button>
-            </div>
-            
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input 
-                type="number" 
-                placeholder="Withdraw amount" 
-                value={withdrawAmount} 
-                onChange={e => setWithdrawAmount(e.target.value)} 
-              />
               <button 
                 className="btn btnGhost" 
                 style={{ borderColor: 'rgba(239, 68, 68, 0.4)' }}
-                disabled={!withdrawAmount || withdrawMutation.isPending}
-                onClick={() => withdrawMutation.mutate({ amount: parseFloat(withdrawAmount) })}
+                disabled={!depositAmount || withdrawMutation.isPending}
+                onClick={() => {
+                  withdrawMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
+                  setEditDate('')
+                  setEditNote('')
+                }}
               >
                 Withdraw
               </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input 
-                type="number" 
-                placeholder="Adjust (can be +/-)" 
-                value={adjustAmount} 
-                onChange={e => setAdjustAmount(e.target.value)} 
-              />
               <button 
                 className="btn btnGhost" 
-                disabled={!adjustAmount || adjustMutation.isPending}
-                onClick={() => adjustMutation.mutate({ amount: parseFloat(adjustAmount) })}
+                disabled={!depositAmount || adjustMutation.isPending}
+                onClick={() => {
+                  adjustMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
+                  setEditDate('')
+                  setEditNote('')
+                }}
               >
-                Adjust
+                Adjust (+/-)
               </button>
             </div>
           </div>
@@ -313,3 +331,4 @@ export function CashPage() {
     </div>
   )
 }
+

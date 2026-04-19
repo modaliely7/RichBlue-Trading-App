@@ -36,6 +36,8 @@ from .portfolio_math import (
     open_stocks_market_value_for_day,
     trade_open_on_day,
 )
+from .engine_quant import refresh_quant
+from .engine_technicals import refresh_technicals
 from .models import (
     Account,
     AccountType,
@@ -141,6 +143,22 @@ def health() -> dict:
 
 
 # --- ACCOUNTS ---
+
+@app.get("/analysis/technical/{symbol}")
+def get_technical(symbol: str, period: str = "1y", interval: str = "1d"):
+    with session_scope() as s:
+        # We could cache technicals here, but for now we always refresh or fetch recent
+        return refresh_technicals(s, symbol)
+
+@app.get("/analysis/quant/{symbol}")
+def get_quant(symbol: str, period: str = "6m", interval: str = "1d"):
+    with session_scope() as s:
+        return refresh_quant(s, symbol)
+
+@app.get("/analysis/smart-money/{symbol}")
+def get_smart_money(symbol: str, period: str = "6m", interval: str = "1d"):
+    with session_scope() as s:
+        return refresh_quant(s, symbol)
 
 @app.get("/accounts", response_model=list[AccountRead])
 def list_accounts():

@@ -68,9 +68,9 @@ export function StockFundamentalsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div className={`signalBanner ${tone === 'good' ? 'bullish' : tone === 'bad' ? 'bearish' : ''}`}>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{data.symbol}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-strong)' }}>{data.symbol}</div>
               <div className="muted" style={{ marginTop: 4 }}>
-                Price: <strong style={{ color: '#f8fafc', fontSize: 16 }}>${fmtNum(data.current_price)}</strong>
+                Price: <strong style={{ color: 'var(--text-strong)', fontSize: 16 }}>${fmtNum(data.current_price)}</strong>
                 {data.provider && <span style={{ marginLeft: 12, fontSize: 11 }}>via {data.provider}</span>}
               </div>
             </div>
@@ -137,3 +137,4 @@ export function StockFundamentalsPage() {
     </div>
   )
 }
+

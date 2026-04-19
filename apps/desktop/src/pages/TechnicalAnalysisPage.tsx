@@ -91,9 +91,9 @@ export function TechnicalAnalysisPage() {
           {/* Signal Banner */}
           <div className={`signalBanner ${cls}`}>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{data.symbol}</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-strong)' }}>{data.symbol}</div>
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                Last Price: <strong style={{ color: '#f8fafc', fontSize: 16 }}>${fmt(data.payload?.price)}</strong>
+                Last Price: <strong style={{ color: 'var(--text-strong)', fontSize: 16 }}>${fmt(data.payload?.price)}</strong>
                 {data.fetched_at && <span style={{ marginLeft: 12, fontSize: 11 }}>Updated: {new Date(data.fetched_at).toLocaleString()}</span>}
               </div>
             </div>
@@ -170,3 +170,4 @@ export function TechnicalAnalysisPage() {
     </div>
   )
 }
+

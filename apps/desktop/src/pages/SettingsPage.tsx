@@ -23,11 +23,25 @@ export function SettingsPage() {
   // Account Management State
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState<'Real' | 'Testing'>('Real')
+  const [editType, setEditType] = useState<'real' | 'testing'>('real')
 
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState<'Real' | 'Testing'>('Real')
+  const [newType, setNewType] = useState<'real' | 'testing'>('real')
+
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'default'
+  })
+
+  const applyTheme = (t: string) => {
+    setTheme(t)
+    localStorage.setItem('theme', t)
+    if (t === 'default') {
+      document.documentElement.removeAttribute('data-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', t)
+    }
+  }
 
   const backupMutation = useMutation({
     mutationFn: () => api.backupDataset(currentAccount?.id ?? 1),
@@ -133,11 +147,11 @@ export function SettingsPage() {
                           onChange={e => setEditType(e.target.value as any)}
                           style={{ padding: 4 }}
                         >
-                          <option value="Real">Real</option>
-                          <option value="Testing">Testing</option>
+                          <option value="real">Real</option>
+                          <option value="testing">Testing</option>
                         </select>
                       ) : (
-                        acc.account_type
+                        acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1)
                       )}
                     </td>
                     <td>
@@ -215,8 +229,8 @@ export function SettingsPage() {
                       onChange={e => setNewType(e.target.value as any)}
                       style={{ padding: 4 }}
                     >
-                      <option value="Real">Real</option>
-                      <option value="Testing">Testing</option>
+                      <option value="real">Real</option>
+                      <option value="testing">Testing</option>
                     </select>
                   </td>
                   <td>
@@ -251,6 +265,19 @@ export function SettingsPage() {
             <button className="btn btnGhost" onClick={() => setIsAddingAccount(true)}>+ Add Account</button>
           </div>
         )}
+      </div>
+
+      <div className="card panel" style={{ marginBottom: 16 }}>
+        <div className="panelTitle">Appearance</div>
+        <div style={{ marginTop: 10 }}>
+          <label>
+            <div className="label">Theme</div>
+            <select value={theme} onChange={e => applyTheme(e.target.value)} style={{ padding: 6, minWidth: 200 }}>
+              <option value="default">Default</option>
+              <option value="medred">MedRed (Neo-Brutalism)</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="card panel">
