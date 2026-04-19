@@ -1,0 +1,33 @@
+# Trading App Execution Tasks
+
+- `[x]` 1. **Database & Backend Models**
+  - `[x]` Create `Account` model (Real vs Testing) and link existing models (`Trade`, `CashTransaction`, `Asset`, `PsychologyEntry`) to it.
+  - `[x]` Add `TechnicalMetrics` and `QuantitativeMetrics` models.
+  - `[x]` Add API endpoints for Account management.
+  - `[x]` Add API endpoints for Database Export/Import (CSV/JSON).
+  - `[x]` Update Cash Transaction API to allow editing/deleting past deposits.
+  - `[x]` Reset the database and recreate schemas (Models updated, endpoints ready).
+- `[ ]` 2. **Data Fetching Engines (EGX Focus)**
+  - `[ ]` Build caching logic: store fetched data, return from DB by default, fetch on app start or manual refresh.
+  - `[ ]` `engine_fundamentals.py`: Fetch data (yfinance/investing.com) and calculate metrics.
+  - `[ ]` `engine_technicals.py`: Fetch OHLCV and compute indicators (SMA, RSI, MACD, etc.).
+  - `[ ]` `engine_quant.py`: Compute volume-based smart money indicators (RVOL, A/D, CMF).
+- `[ ]` 3. **Frontend: UI Design & Accounts**
+  - `[ ]` Refactor `index.css` to a premium Glassmorphic Dark Theme with Neon Blue accents.
+  - `[ ]` Add Account Switcher in the frontend (Sidebar/Header) and pass account ID to queries.
+- `[x]` 4. **Frontend: Dashboard Updates**
+  - `[x]` Fix math logic for Realized/Unrealized PnL and Balance mismatches.
+  - `[x]` Clean display of available cash.
+  - `[x]` Remove redundant instructional sections (How this adds up, Math Reference).
+- `[ ]` 5. **Frontend: Trades & Journal**
+  - `[x]` Place trade details & actions beside the trades list.
+  - `[ ]` Move Export/Import trades functionality to the Trades (Journal) page.
+- `[x]` 6. **Frontend: Redesigns**
+  - `[x]` Redesign the Calendar component for a cleaner, heatmap UI.
+  - `[ ]` Complete `StockFundamentalsPage.tsx` with metrics table and fair value.
+  - `[ ]` Complete `TechnicalAnalysisPage.tsx` with OHLC charts and signal gauges.
+  - `[ ]` Complete `SmartMoneyPage.tsx` with volume analysis and quantitative score.
+- `[ ]` 7. **Final Verification**
+  - `[ ]` Test data fetching for EGX symbols (e.g., COMI.CA).
+  - `[ ]` Verify cash editing logic.
+  - `[ ]` Verify account switching isolation.

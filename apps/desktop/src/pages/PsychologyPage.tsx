@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { api, type Trade } from '../lib/api'
 import type { PsychologyCreate, PsychologyState } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 const STATES: PsychologyState[] = ['Confident', 'Calm', 'Fear', 'FOMO', 'Overtrading']
 
@@ -13,11 +14,21 @@ function toDatetimeLocalValue(iso: string) {
 }
 
 export function PsychologyPage() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
-  const { data: entries, isLoading, error } = useQuery({ queryKey: ['psychology'], queryFn: api.listPsychology })
-  const { data: summary } = useQuery({ queryKey: ['psychologySummary'], queryFn: api.psychologySummary })
+  const { data: entries, isLoading, error } = useQuery({ 
+    queryKey: ['psychology', currentAccount?.id], 
+    queryFn: () => api.listPsychology(currentAccount?.id ?? 1) 
+  })
+  const { data: summary } = useQuery({ 
+    queryKey: ['psychologySummary', currentAccount?.id], 
+    queryFn: () => api.psychologySummary(currentAccount?.id ?? 1) 
+  })
 
-  const { data: trades } = useQuery({ queryKey: ['trades'], queryFn: api.listTrades })
+  const { data: trades } = useQuery({ 
+    queryKey: ['trades', currentAccount?.id], 
+    queryFn: () => api.listTrades(currentAccount?.id ?? 1) 
+  })
 
   const [state, setState] = useState<PsychologyState>('Calm')
   const [intensity, setIntensity] = useState(3)
@@ -29,8 +40,8 @@ export function PsychologyPage() {
     mutationFn: (payload: PsychologyCreate) => api.createPsychology(payload),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['psychology'] }),
-        qc.invalidateQueries({ queryKey: ['psychologySummary'] }),
+        qc.invalidateQueries({ queryKey: ['psychology', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['psychologySummary', currentAccount?.id] }),
       ])
       setIntensity(3)
       setTradeId('')
@@ -42,15 +53,15 @@ export function PsychologyPage() {
     mutationFn: (id: number) => api.deletePsychology(id),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['psychology'] }),
-        qc.invalidateQueries({ queryKey: ['psychologySummary'] }),
+        qc.invalidateQueries({ queryKey: ['psychology', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['psychologySummary', currentAccount?.id] }),
       ])
     },
   })
 
   const tradeOptions = useMemo(() => {
-    const rows = trades ?? []
-    return rows.map((t) => ({
+    const rows = (trades as Trade[]) ?? []
+    return rows.map((t: Trade) => ({
       id: t.id,
       label: `${t.symbol} #${t.id} • ${new Date(t.exit_date ?? t.entry_date).toISOString().slice(0, 10)} • ${t.pnl == null ? '—' : formatCurrency(t.pnl)}`,
     }))

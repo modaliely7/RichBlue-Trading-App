@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, type Trade, type OverviewResponse } from '../lib/api'
 import { formatCurrency } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 function pad2(n: number) {
   return String(n).padStart(2, '0')
@@ -26,7 +27,11 @@ function getTradeDayKey(t: Trade) {
 }
 
 export function CalendarPage() {
-  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ queryKey: ['overview'], queryFn: () => api.overview() })
+  const { currentAccount } = useAccount()
+  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ 
+    queryKey: ['overview', currentAccount?.id], 
+    queryFn: () => api.overview(currentAccount?.id ?? 1) 
+  })
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [jumpDate, setJumpDate] = useState(() => dayKeyLocal(new Date()))
@@ -110,7 +115,7 @@ export function CalendarPage() {
         <div className="card panel">
           <div className="calendarGrid">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-              <div key={d} className="calendarDow muted">
+              <div key={d} className="calendarDow">
                 {d}
               </div>
             ))}
@@ -129,10 +134,10 @@ export function CalendarPage() {
                 >
                   <div className="calendarDay">{d.date.getDate()}</div>
                   {hasTrades ? (
-                    <div className={`calendarPnl ${pnl >= 0 ? 'good' : 'bad'}`}>{formatCurrency(pnl)}</div>
-                  ) : (
-                    <div className="calendarPnl muted">—</div>
-                  )}
+                    <div className={`calendarPnl ${pnl >= 0 ? 'good' : 'bad'}`}>
+                      {pnl === 0 ? '—' : (pnl > 0 ? '+' : '') + formatCurrency(pnl).replace('$', '')}
+                    </div>
+                  ) : null}
                 </button>
               )
             })}
@@ -144,59 +149,49 @@ export function CalendarPage() {
           {selectedDay ? (
             <>
               <div className="detailsLine">
-                <span className="muted">Day:</span> <span className="mono">{selectedDay}</span>
+                <span className="muted">Selected Day</span>
+                <span className="mono" style={{ color: '#f8fafc', fontWeight: 700 }}>{selectedDay}</span>
               </div>
               <div className="detailsLine">
-                <span className="muted">PnL:</span>{' '}
-                <span className={selected && selected.pnl >= 0 ? 'good' : 'bad'}>
+                <span className="muted">Daily PnL</span>
+                <span className={`mono ${selected && selected.pnl >= 0 ? 'good' : 'bad'}`} style={{ fontWeight: 800 }}>
                   {formatCurrency(selected?.pnl ?? 0)}
                 </span>
-                <span className="muted" style={{ marginLeft: 10 }}>
-                  Trades:
-                </span>{' '}
-                <span className="mono">{selected?.trades.length ?? 0}</span>
+              </div>
+              <div className="detailsLine">
+                <span className="muted">Total Trades</span>
+                <span className="mono" style={{ color: 'var(--accent)' }}>{selected?.trades.length ?? 0}</span>
               </div>
 
-              <div className="tableWrap" style={{ marginTop: 10 }}>
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th>Market</th>
-                      <th>Type</th>
-                      <th>PnL</th>
-                      <th>Entry</th>
-                      <th>Exit</th>
-                      <th>When</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(selected?.trades ?? []).map((t) => (
-                      <tr key={t.id}>
-                        <td className="mono">{t.symbol}</td>
-                        <td>{t.market}</td>
-                        <td>{t.trade_type}</td>
-                        <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'}>
-                          {t.pnl == null ? '—' : formatCurrency(t.pnl)}
-                        </td>
-                        <td>{t.entry_price}</td>
-                        <td>{t.exit_price ?? '—'}</td>
-                        <td className="mono">{(t.exit_date ?? t.entry_date).slice(0, 16).replace('T', ' ')}</td>
-                      </tr>
-                    ))}
-                    {(selected?.trades ?? []).length === 0 ? (
+              {selected?.trades.length ? (
+                <div className="tableWrap" style={{ marginTop: 20 }}>
+                  <table className="table">
+                    <thead>
                       <tr>
-                        <td colSpan={7} className="muted">
-                          No trades on this day.
-                        </td>
+                        <th>Symbol</th>
+                        <th>Type</th>
+                        <th>PnL</th>
                       </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {selected.trades.map((t) => (
+                        <tr key={t.id}>
+                          <td className="mono" style={{ color: 'var(--accent)' }}>{t.symbol}</td>
+                          <td style={{ fontSize: 11 }}>{t.trade_type}</td>
+                          <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'} style={{ fontWeight: 700 }}>
+                            {t.pnl == null ? '—' : formatCurrency(t.pnl)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="muted" style={{ marginTop: 20, textAlign: 'center' }}>No trades recorded for this day.</div>
+              )}
             </>
           ) : (
-            <div className="muted">Click a day to see its trades.</div>
+            <div className="muted" style={{ padding: '20px 0', textAlign: 'center' }}>Click a day in the calendar to see details.</div>
           )}
         </div>
       </div>

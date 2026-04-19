@@ -4,19 +4,22 @@ import csv
 import io
 import os
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 import logging
+import json
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select
+import bisect
 
 import numpy as np
 import pandas as pd
+print(f"DEBUG: pandas imported as pd: {pd}")
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
@@ -31,10 +34,14 @@ from .portfolio_math import (
     unrealized_pnl_cumulative_through,
     portfolio_value_with_unrealized,
     open_stocks_market_value_for_day,
+    trade_open_on_day,
 )
 from .models import (
+    Account,
+    AccountType,
     Asset,
     AssetClass,
+    Base,
     StockRawData,
     PriceHistory,
     StockMetrics,
@@ -50,6 +57,9 @@ from .models import (
     TradeType,
 )
 from .schemas import (
+    AccountRead,
+    AccountCreate,
+    AccountUpdate,
     AssetCreate,
     AssetRead,
     AssetUpdate,
@@ -120,9 +130,80 @@ def _to_trade_read(t: Trade) -> TradeRead:
     )
 
 
+def tx_at_date(at: datetime | date) -> date:
+    if hasattr(at, "date"):
+        return at.date()
+    return at
+
 @app.get("/health")
 def health() -> dict:
     return {"ok": True, "ts": datetime.utcnow().isoformat()}
+
+
+# --- ACCOUNTS ---
+
+@app.get("/accounts", response_model=list[AccountRead])
+def list_accounts():
+    with session_scope() as s:
+        # Ensure at least one account exists
+        accs = s.execute(select(Account).where(Account.is_active == True)).scalars().all()
+        if not accs:
+            default = Account(name="Real Account", account_type=AccountType.real, is_active=True)
+            s.add(default)
+            s.flush()
+            testing = Account(name="Testing Account", account_type=AccountType.testing, is_active=True)
+            s.add(testing)
+            s.commit()
+            accs = [default, testing]
+        return accs
+
+
+@app.post("/accounts", response_model=AccountRead)
+def create_account(req: AccountCreate):
+    with session_scope() as s:
+        acc = Account(name=req.name, account_type=req.account_type)
+        s.add(acc)
+        s.commit()
+        s.refresh(acc)
+        return acc
+
+
+@app.get("/accounts/{account_id}", response_model=AccountRead)
+def get_account(account_id: int):
+    with session_scope() as s:
+        acc = s.get(Account, account_id)
+        if not acc or not acc.is_active:
+            raise HTTPException(status_code=404, detail="Account not found")
+        return acc
+
+
+@app.put("/accounts/{account_id}", response_model=AccountRead)
+def update_account(account_id: int, req: AccountUpdate):
+    with session_scope() as s:
+        acc = s.get(Account, account_id)
+        if not acc or not acc.is_active:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if req.name is not None:
+            acc.name = req.name
+        if req.account_type is not None:
+            acc.account_type = req.account_type
+        if req.is_active is not None:
+            acc.is_active = req.is_active
+        s.commit()
+        s.refresh(acc)
+        return acc
+
+
+@app.delete("/accounts/{account_id}")
+def delete_account(account_id: int):
+    with session_scope() as s:
+        acc = s.get(Account, account_id)
+        if not acc or not acc.is_active:
+            raise HTTPException(status_code=404, detail="Account not found")
+        # Soft delete
+        acc.is_active = False
+        s.commit()
+        return {"deleted": True}
 
 
 @app.get("/performance/analytics")
@@ -232,7 +313,7 @@ def performance_report_pdf() -> StreamingResponse:
     y = h - 0.9 * inch
     heading(y, "Trading Performance Report")
     y -= 0.3 * inch
-    text(0.75 * inch, y, f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}", 9)
+    text(0.75 * inch, y, f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", 9)
     y -= 0.35 * inch
 
     overall = analytics.get("overall", {}) or {}
@@ -292,20 +373,30 @@ def performance_report_pdf() -> StreamingResponse:
 
 
 @app.get("/trades", response_model=list[TradeRead])
-def list_trades(limit: int = 200, offset: int = 0) -> list[TradeRead]:
+def list_trades(account_id: int = 1, limit: int = 200, offset: int = 0) -> list[TradeRead]:
     with session_scope() as s:
-        rows = s.execute(select(Trade).order_by(Trade.entry_date.desc()).limit(limit).offset(offset)).scalars().all()
+        rows = s.execute(
+            select(Trade)
+            .where(Trade.account_id == account_id)
+            .order_by(Trade.entry_date.desc())
+            .limit(limit)
+            .offset(offset)
+        ).scalars().all()
         return [_to_trade_read(t) for t in rows]
 
 
-def _cash_balance(s) -> float:
-    total = s.execute(select(func.coalesce(func.sum(CashTransaction.amount), 0.0))).scalar_one()
+def _cash_balance(s, account_id: int) -> float:
+    total = s.execute(
+        select(func.coalesce(func.sum(CashTransaction.amount), 0.0))
+        .where(CashTransaction.account_id == account_id)
+    ).scalar_one()
     return float(total or 0.0)
 
 
 def _add_cash_tx(
     s,
     *,
+    account_id: int = 1,
     amount: float,
     tx_type: CashTxType,
     at: datetime | None = None,
@@ -313,9 +404,10 @@ def _add_cash_tx(
     trade: Trade | None = None,
 ) -> CashTransaction:
     x = CashTransaction(
+        account_id=account_id,
         amount=float(amount),
         tx_type=tx_type,
-        at=at or datetime.utcnow(),
+        at=at or datetime.now(UTC),
         note=note,
         trade_id=(trade.id if trade else None),
         symbol=(trade.symbol if trade else None),
@@ -324,9 +416,9 @@ def _add_cash_tx(
     return x
 
 
-def _compute_holdings(s) -> list[HoldingRow]:
-    trades = s.execute(select(Trade)).scalars().all()
-    assets = s.execute(select(Asset).where(Asset.asset_class == AssetClass.stocks)).scalars().all()
+def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
+    trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
+    assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
     price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets if (a.symbol or "").strip()}
 
     by_symbol: dict[str, dict] = {}
@@ -394,35 +486,35 @@ def _compute_holdings(s) -> list[HoldingRow]:
     return rows
 
 
-def _funds_cost_from_assets(s) -> float:
+def _funds_cost_from_assets(s, account_id: int = 1) -> float:
     return float(
         sum(
             float(a.quantity or 0.0) * float(a.avg_cost or 0.0)
-            for a in s.execute(select(Asset).where(Asset.asset_class == AssetClass.etfs)).scalars().all()
+            for a in s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.etfs)).scalars().all()
         )
     )
 
 
 @app.get("/overview", response_model=OverviewResponse)
-def overview(method: str = "realized") -> OverviewResponse:
+def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
     with session_scope() as s:
-        trades = s.execute(select(Trade).order_by(Trade.entry_date.desc())).scalars().all()
-        holdings = _compute_holdings(s)
-        txs = s.execute(select(CashTransaction).order_by(CashTransaction.at.asc())).scalars().all()
-        end_day = datetime.utcnow().date()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.desc())).scalars().all()
+        holdings = _compute_holdings(s, account_id)
+        txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
+        end_day = datetime.now(UTC).date()
 
         # Build a mapping of current prices for liquidation/unrealized calculations
-        assets_for_prices = s.execute(select(Asset)).scalars().all()
+        assets_for_prices = s.execute(select(Asset).where(Asset.account_id == account_id)).scalars().all()
         price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets_for_prices if (a.symbol or "").strip()}
 
         # Stocks cost basis (open cost) and funds cost (invested capital)
         stocks_cost = float(sum(float(h.open_cost_basis or 0.0) for h in holdings))
-        funds_cost = _funds_cost_from_assets(s)
+        funds_cost = _funds_cost_from_assets(s, account_id)
         assets_mv = float(stocks_cost + funds_cost)  # kept as "assets_market_value" for cost/basis
 
         # Current market values (snapshot) for portfolio/equity computation
         stocks_mv_current = float(sum(float(h.market_value or 0.0) for h in holdings))
-        funds_assets = s.execute(select(Asset).where(Asset.asset_class == AssetClass.etfs)).scalars().all()
+        funds_assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.etfs)).scalars().all()
         funds_mv_current = float(sum(float(a.current_price or 0.0) * float(a.quantity or 0.0) for a in funds_assets))
         assets_mv_current = float(stocks_mv_current + funds_mv_current)
 
@@ -433,64 +525,111 @@ def overview(method: str = "realized") -> OverviewResponse:
 
         cash_now = ledger_balance_through(txs, end_day)
         net_deposited_now = net_deposited_through(txs, end_day)
-        # Portfolio value (equity) = Free Cash + Market Value of Open Positions
-        portfolio_value_now = float(cash_now + stocks_mv_current + funds_mv_current)
-        total_return_value_now = float(realized_total + unreal_total)
+        
+        if method == "realized":
+            portfolio_value_now = float(net_deposited_now + realized_total)
+            total_return_value_now = float(realized_total)
+        else:
+            # Liquidation method
+            portfolio_value_now = float(cash_now + stocks_mv_current + funds_mv_current)
+            total_return_value_now = float(realized_total + unreal_total)
+            
         total_return_pct_now = portfolio_total_return_pct(total_return_value_now, net_deposited_now)
 
-        # Daily series: portfolio_value = net_deposited + cumulative realized P/L through that day.
+        # Build a price lookup cache: symbol -> list of (date_str, price) sorted by date_str
+        all_symbols = list(set((t.symbol or "").strip().upper() for t in trades if t.symbol))
+        price_history_cache: dict[str, list[tuple[str, float]]] = {}
+        if all_symbols:
+            hist_rows = s.execute(
+                select(PriceHistory)
+                .where(PriceHistory.symbol.in_(all_symbols))
+                .order_by(PriceHistory.symbol.asc(), PriceHistory.at.asc())
+            ).scalars().all()
+            for r in hist_rows:
+                sym = r.symbol.upper()
+                ds = (r.at.date() if hasattr(r.at, "date") else r.at).strftime("%Y-%m-%d")
+                # price_history_cache is already sorted by date due to order_by PriceHistory.at.asc()
+                price_history_cache.setdefault(sym, []).append((ds, float(r.close)))
+
+        # Daily series
         labels: list[str] = []
-        portfolio_value_series: list[float] = []
+        portfolio_value_series: list[float] = [] # Realized: Net Dep + Realized P/L
         net_dep_series: list[float] = []
-        total_return_series: list[float] = []
-        liquidation_requested = (method or "").lower() in {"liquidation", "liquid", "unrealized", "with_unrealized"}
-        portfolio_value_liquidation_series: list[float] | None = [] if liquidation_requested else None
+        total_return_series: list[float] = [] # Realized P/L
+        equity_value_series: list[float] = [] # Liquidation: Cash + Market Value
 
         start_candidates: list[date] = []
         if txs:
-            start_candidates.append(min((tx.at.date() if hasattr(tx.at, "date") else tx.at) for tx in txs))
+            start_candidates.append(min((tx_at_date(tx.at)) for tx in txs))
         if trades:
             start_candidates.append(
-                min((t.entry_date.date() if hasattr(t.entry_date, "date") else t.entry_date) for t in trades)
+                min((tx_at_date(t.entry_date)) for t in trades)
             )
-        end_day = datetime.utcnow().date()
+        
+        end_day = datetime.now(UTC).date()
         if start_candidates:
             start_day = min(start_candidates)
             if start_day > end_day:
                 start_day = end_day
             cur = start_day
+            
+            # Helper to get price for a symbol on/before a day
+            def get_price_on_day(sym: str, d: date) -> float | None:
+                sym = sym.upper()
+                if sym not in price_history_cache:
+                    return price_by_symbol.get(sym)
+                
+                prices = price_history_cache[sym] # list of (ds, price)
+                ds = d.strftime("%Y-%m-%d")
+                
+                # Use bisect to find the rightmost entry <= ds
+                idx = bisect.bisect_right(prices, (ds, float('inf'))) - 1
+                if idx >= 0:
+                    return prices[idx][1]
+                
+                return price_by_symbol.get(sym)
+
             while cur <= end_day:
-                day_str = cur.strftime("%Y-%m-%d")
+                # Skip weekends — markets are closed, no new data
+                if cur.weekday() < 5:  # 0=Mon ... 4=Fri
+                    day_str = cur.strftime("%Y-%m-%d")
 
-                # Free cash on this day
-                cash_day = ledger_balance_through(txs, cur)
-                # Market value of open stock trades on this day (uses available price mapping)
-                open_mv = open_stocks_market_value_for_day(trades, cur, price_by_symbol)
-                pv = float(cash_day + open_mv + funds_mv_current)
+                    # 1. Realized metrics
+                    net_dep = net_deposited_through(txs, cur)
+                    real_cum = realized_pnl_cumulative_through(trades, cur)
+                    pv_realized = float(net_dep + real_cum)
 
-                real_cum = realized_pnl_cumulative_through(trades, cur)
-                unreal = unrealized_pnl_cumulative_through(trades, cur, price_by_symbol)
-                tr_day = float(real_cum + unreal)
+                    # 2. Liquidation metrics (Equity)
+                    cash_day = ledger_balance_through(txs, cur)
 
-                labels.append(day_str)
-                net_dep_series.append(net_deposited_through(txs, cur))
-                total_return_series.append(tr_day)
-                portfolio_value_series.append(pv)
-                if liquidation_requested:
-                    # pv already uses market prices -> liquidation view
-                    portfolio_value_liquidation_series.append(pv)
+                    # Market value of open trades using historical price lookup
+                    open_mv = 0.0
+                    for t in trades:
+                        if trade_open_on_day(t, cur):
+                            sym = (t.symbol or "").strip().upper()
+                            px = get_price_on_day(sym, cur)
+                            if px is not None:
+                                open_mv += float(px * (t.position_size or 0.0))
+
+                    equity_day = float(cash_day + open_mv + funds_mv_current)
+
+                    labels.append(day_str)
+                    net_dep_series.append(net_dep)
+                    total_return_series.append(real_cum)
+                    portfolio_value_series.append(pv_realized)
+                    equity_value_series.append(equity_day)
+
                 cur += timedelta(days=1)
         else:
-            labels = [datetime.utcnow().strftime("%Y-%m-%d")]
-            portfolio_value_series = [portfolio_value_now]
+            labels = [datetime.now(UTC).strftime("%Y-%m-%d")]
+            portfolio_value_series = [net_deposited_now + realized_total]
             net_dep_series = [net_deposited_now]
-            total_return_series = [total_return_value_now]
-            if liquidation_requested:
-                portfolio_value_liquidation_series = [portfolio_value_with_unrealized(trades, txs, end_day, price_by_symbol)]
+            total_return_series = [realized_total]
+            equity_value_series = [portfolio_value_now]
 
         return OverviewResponse(
             kpis={
-                "as_of": datetime.utcnow(),
+                "as_of": datetime.now(UTC),
                 "cash_balance": cash_now,
                 "assets_market_value": assets_mv,
                 "portfolio_value": portfolio_value_now,
@@ -513,22 +652,22 @@ def overview(method: str = "realized") -> OverviewResponse:
                 "portfolio_value": portfolio_value_series,
                 "net_deposited": net_dep_series,
                 "total_return_value": total_return_series,
-                "portfolio_value_liquidation": portfolio_value_liquidation_series,
+                "portfolio_value_liquidation": equity_value_series,
             },
         )
 
 
 @app.get("/cash/balance", response_model=CashBalanceResponse)
-def cash_balance() -> CashBalanceResponse:
+def cash_balance(account_id: int = 1) -> CashBalanceResponse:
     with session_scope() as s:
-        return CashBalanceResponse(balance=_cash_balance(s))
+        return CashBalanceResponse(balance=_cash_balance(s, account_id))
 
 
 @app.get("/cash/transactions", response_model=list[CashTxRead])
-def cash_transactions(limit: int = 300, offset: int = 0) -> list[CashTxRead]:
+def cash_transactions(account_id: int = 1, limit: int = 300, offset: int = 0) -> list[CashTxRead]:
     with session_scope() as s:
         rows = (
-            s.execute(select(CashTransaction).order_by(CashTransaction.at.desc()).limit(limit).offset(offset))
+            s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.desc()).limit(limit).offset(offset))
             .scalars()
             .all()
         )
@@ -583,7 +722,7 @@ def cash_adjust_options() -> Response:
 
 
 @app.post("/cash/deposit")
-def cash_deposit(payload: CashDepositRequest) -> dict:
+def cash_deposit(payload: CashDepositRequest, account_id: int = 1) -> dict:
     """Accept a deposit and return the new balance plus created transaction id.
 
     This endpoint is intentionally tolerant and returns a helpful payload for the UI.
@@ -598,11 +737,12 @@ def cash_deposit(payload: CashDepositRequest) -> dict:
             if amt <= 0:
                 raise HTTPException(status_code=400, detail="Amount must be greater than zero")
 
-            tx = _add_cash_tx(s, amount=amt, tx_type=CashTxType.deposit, at=payload.at, note=payload.note)
+            logger.info("Attempting deposit for account %s: %s", account_id, payload)
+            tx = _add_cash_tx(s, account_id=account_id, amount=amt, tx_type=CashTxType.deposit, at=payload.at, note=payload.note)
             s.flush()
-            bal = _cash_balance(s)
+            bal = _cash_balance(s, account_id)
             # include tx id to help the client confirm creation
-            logger.info("Deposit recorded: tx_id=%s amount=%s balance=%s", getattr(tx, 'id', None), amt, bal)
+            logger.info("Deposit successful: tx_id=%s amount=%s new_balance=%s", getattr(tx, 'id', None), amt, bal)
             return {"balance": bal, "tx_id": getattr(tx, 'id', None)}
     except HTTPException:
         raise
@@ -612,41 +752,83 @@ def cash_deposit(payload: CashDepositRequest) -> dict:
 
 
 @app.post("/cash/withdraw", response_model=CashBalanceResponse)
-def cash_withdraw(payload: CashWithdrawRequest) -> CashBalanceResponse:
+def cash_withdraw(payload: CashWithdrawRequest, account_id: int = 1) -> CashBalanceResponse:
     with session_scope() as s:
-        bal = _cash_balance(s)
+        bal = _cash_balance(s, account_id)
         if payload.amount > bal + 1e-9:
             raise HTTPException(status_code=400, detail=f"Insufficient cash (Available: {bal:.2f}).")
-        _add_cash_tx(s, amount=-payload.amount, tx_type=CashTxType.withdraw, at=payload.at, note=payload.note)
+        _add_cash_tx(s, account_id=account_id, amount=-payload.amount, tx_type=CashTxType.withdraw, at=payload.at, note=payload.note)
         s.flush()
-        return CashBalanceResponse(balance=_cash_balance(s))
+        return CashBalanceResponse(balance=_cash_balance(s, account_id))
 
 
 @app.post("/cash/adjust", response_model=CashBalanceResponse)
-def cash_adjust(payload: CashAdjustRequest) -> CashBalanceResponse:
+def cash_adjust(payload: CashAdjustRequest, account_id: int = 1) -> CashBalanceResponse:
     with session_scope() as s:
-        _add_cash_tx(s, amount=payload.amount, tx_type=CashTxType.adjustment, at=payload.at, note=payload.note)
+        _add_cash_tx(s, account_id=account_id, amount=payload.amount, tx_type=CashTxType.adjustment, at=payload.at, note=payload.note)
         s.flush()
-        return CashBalanceResponse(balance=_cash_balance(s))
+        return CashBalanceResponse(balance=_cash_balance(s, account_id))
+
+@app.delete("/cash/transactions/{tx_id}")
+def delete_cash_transaction(tx_id: int) -> dict:
+    with session_scope() as s:
+        tx = s.get(CashTransaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Cash transaction not found")
+        # Do not allow deleting trade-linked transactions directly
+        if tx.tx_type in (CashTxType.trade_buy, CashTxType.trade_sell, CashTxType.fee):
+            raise HTTPException(status_code=400, detail="Cannot delete trade-linked cash transaction directly. Please edit the trade instead.")
+        s.delete(tx)
+        return {"deleted": True}
+
+
+@app.put("/cash/transactions/{tx_id}", response_model=CashTxRead)
+def update_cash_transaction(tx_id: int, payload: CashAdjustRequest) -> CashTxRead:
+    with session_scope() as s:
+        tx = s.get(CashTransaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Cash transaction not found")
+        if tx.tx_type in (CashTxType.trade_buy, CashTxType.trade_sell, CashTxType.fee):
+            raise HTTPException(status_code=400, detail="Cannot edit trade-linked cash transaction directly. Please edit the trade instead.")
+        
+        tx.amount = payload.amount
+        if payload.at is not None:
+            tx.at = payload.at
+        if payload.note is not None:
+            tx.note = payload.note
+            
+        s.commit()
+        s.refresh(tx)
+        return CashTxRead(
+            id=tx.id,
+            amount=tx.amount,
+            tx_type=tx.tx_type,
+            trade_id=tx.trade_id,
+            symbol=tx.symbol,
+            at=tx.at,
+            note=tx.note,
+        )
 
 
 @app.post("/trades", response_model=TradeRead)
-def create_trade(payload: TradeCreate) -> TradeRead:
+def create_trade(payload: TradeCreate, account_id: int = 1) -> TradeRead:
     with session_scope() as s:
         data = payload.model_dump()
         required_cash = float((data.get("entry_price") or 0.0) * (data.get("position_size") or 0.0) + (data.get("fees") or 0.0))
-        if required_cash > 0 and _cash_balance(s) < required_cash:
+        if required_cash > 0 and _cash_balance(s, account_id) < required_cash:
             raise HTTPException(status_code=400, detail=f"Insufficient cash. Required {required_cash:.2f}.")
 
         t = Trade(**data)
+        t.account_id = account_id
         s.add(t)
         # Build a mapping of current prices for liquidation/unrealized calculations
-        assets_for_prices = s.execute(select(Asset).where(Asset.asset_class == AssetClass.stocks)).scalars().all()
+        assets_for_prices = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
         price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets_for_prices if (a.symbol or "").strip()}
         s.flush()
         if t.position_size and t.entry_price:
             _add_cash_tx(
                 s,
+                account_id=account_id,
                 amount=-(float(t.entry_price) * float(t.position_size)),
                 tx_type=CashTxType.trade_buy,
                 at=t.entry_date,
@@ -656,6 +838,7 @@ def create_trade(payload: TradeCreate) -> TradeRead:
         if t.fees and float(t.fees) != 0.0:
             _add_cash_tx(
                 s,
+                account_id=account_id,
                 amount=-float(t.fees),
                 tx_type=CashTxType.fee,
                 at=t.entry_date,
@@ -665,18 +848,20 @@ def create_trade(payload: TradeCreate) -> TradeRead:
         if t.exit_price is not None:
             _add_cash_tx(
                 s,
+                account_id=account_id,
                 amount=float(t.exit_price or 0.0) * float(t.position_size or 0.0),
                 tx_type=CashTxType.trade_sell,
-                at=t.exit_date or datetime.utcnow(),
+                at=t.exit_date or datetime.now(UTC),
                 note="Trade exit (sell)",
                 trade=t,
             )
         if t.exit_price is not None and float(t.exit_fees or 0.0) > 0.0:
             _add_cash_tx(
                 s,
+                account_id=account_id,
                 amount=-float(t.exit_fees),
                 tx_type=CashTxType.fee,
-                at=t.exit_date or datetime.utcnow(),
+                at=t.exit_date or datetime.now(UTC),
                 note="Trade exit (fees)",
                 trade=t,
             )
@@ -709,13 +894,14 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         before_required = before_entry_price * before_size + before_fees
         after_required = after_entry_price * after_size + after_fees
         delta_required = after_required - before_required
-        if delta_required > 0 and _cash_balance(s) < delta_required:
+        if delta_required > 0 and _cash_balance(s, t.account_id) < delta_required:
             raise HTTPException(status_code=400, detail=f"Insufficient cash to increase position. Need extra {delta_required:.2f}.")
 
         if abs(delta_required) > 1e-9:
             # Positive delta_required means more cash needed -> record additional outflow (negative amount)
             _add_cash_tx(
                 s,
+                account_id=t.account_id,
                 amount=-float(delta_required),
                 tx_type=CashTxType.adjustment,
                 at=t.entry_date,
@@ -729,9 +915,10 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         if became_closed:
             _add_cash_tx(
                 s,
+                account_id=t.account_id,
                 amount=float(t.exit_price or 0.0) * float(t.position_size or 0.0),
                 tx_type=CashTxType.trade_sell,
-                at=t.exit_date or datetime.utcnow(),
+                at=t.exit_date or datetime.now(UTC),
                 note="Trade exit (sell)",
                 trade=t,
             )
@@ -740,7 +927,7 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
                     s,
                     amount=-after_exit_fees,
                     tx_type=CashTxType.fee,
-                    at=t.exit_date or datetime.utcnow(),
+                    at=t.exit_date or datetime.now(UTC),
                     note="Trade exit (fees)",
                     trade=t,
                 )
@@ -749,7 +936,7 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
                 s,
                 amount=-(float(before_exit_price or 0.0) * float(before_size or 0.0)),
                 tx_type=CashTxType.adjustment,
-                at=before_exit_date or datetime.utcnow(),
+                at=before_exit_date or datetime.now(UTC),
                 note="Trade re-opened (reverse sell cash)",
                 trade=t,
             )
@@ -758,7 +945,7 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
                     s,
                     amount=before_exit_fees,
                     tx_type=CashTxType.adjustment,
-                    at=before_exit_date or datetime.utcnow(),
+                    at=before_exit_date or datetime.now(UTC),
                     note="Trade re-opened (reverse exit fees)",
                     trade=t,
                 )
@@ -803,7 +990,8 @@ def delete_trade(trade_id: int) -> dict:
         t = s.get(Trade, trade_id)
         if not t:
             raise HTTPException(status_code=404, detail="Trade not found")
-        # Keep ledger immutable; deleting a trade does not remove cash transactions.
+        # To maintain accurate cash balance, remove the cash transactions linked to this trade
+        s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
         s.delete(t)
         return {"deleted": True}
 
@@ -1041,77 +1229,44 @@ def _compute_smart_money(symbol: str, period: str = "1y", interval: str = "1d") 
     }
 
 
-@app.get("/fundamentals/{symbol}")
-def get_fundamentals(symbol: str, refresh: bool = False) -> dict:
-    with session_scope() as s:
-        sym = (symbol or "").strip().upper()
-        if not sym:
-            raise HTTPException(status_code=400, detail="Invalid symbol")
-        TTL_HOURS = int(os.environ.get("FUNDAMENTALS_TTL_HOURS", "24"))
-        if refresh:
-            return _refresh_fundamentals(s, sym)
-        row = (
-            s.execute(
-                select(StockMetrics).where(StockMetrics.symbol == sym).order_by(StockMetrics.fetched_at.desc()).limit(1)
-            )
-            .scalars()
-            .first()
-        )
-        if row:
+    return _refresh_fundamentals(s, sym)
+
+
+@app.get("/technical/{symbol}")
+def get_technical(symbol: str, period: str = "1y", interval: str = "1d") -> dict:
+    """Compute and return technical indicators for a symbol."""
+    try:
+        data = _compute_technical_indicators(symbol, period=period, interval=interval)
+        return jsonable_encoder(data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Technical indicators failed: {e}") from e
+
+
+@app.get("/smart-money/{symbol}")
+def get_smart_money(symbol: str, period: str = "1y", interval: str = "1d", persist: bool = True) -> dict:
+    """Compute rudimentary smart-money signals for a symbol."""
+    try:
+        data = _compute_smart_money(symbol, period=period, interval=interval)
+        if persist:
             try:
-                if row.fetched_at and (datetime.utcnow() - row.fetched_at).total_seconds() <= TTL_HOURS * 3600:
-                    return jsonable_encoder(row)
+                with session_scope() as s:
+                    sym = (symbol or "").strip().upper()
+                    row = SmartMoneySignal(symbol=sym, provider="computed", computed_at=datetime.utcnow(), payload=json.dumps(data))
+                    s.add(row)
+                    s.flush()
             except Exception:
-                # if any issue with dates, fall through to refresh
                 pass
-        return _refresh_fundamentals(s, sym)
-
-
-    @app.get("/technical/{symbol}")
-    def get_technical(symbol: str, period: str = "1y", interval: str = "1d") -> dict:
-        """Compute and return technical indicators for a symbol.
-
-        Query params:
-        - period: history period for price data (yfinance style, e.g. '1y')
-        - interval: data interval (e.g. '1d')
-        """
-        try:
-            data = _compute_technical_indicators(symbol, period=period, interval=interval)
-            return jsonable_encoder(data)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Technical indicators failed: {e}") from e
-
-
-    @app.get("/smart-money/{symbol}")
-    def get_smart_money(symbol: str, period: str = "1y", interval: str = "1d", persist: bool = True) -> dict:
-        """Compute rudimentary smart-money signals for a symbol.
-
-        Returns counts of large-volume buy/sell events, OBV slope and institutional holding hint.
-        """
-        try:
-            data = _compute_smart_money(symbol, period=period, interval=interval)
-            # persist signal if requested
-            if persist:
-                try:
-                    with session_scope() as s:
-                        sym = (symbol or "").strip().upper()
-                        row = SmartMoneySignal(symbol=sym, provider="computed", computed_at=datetime.utcnow(), payload=json.dumps(data))
-                        s.add(row)
-                        s.flush()
-                except Exception:
-                    # best-effort persistence: don't fail the request on DB issues
-                    pass
-            return jsonable_encoder(data)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Smart money computation failed: {e}") from e
+        return jsonable_encoder(data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Smart money computation failed: {e}") from e
 
 
 @app.post("/trades/import/csv")
-async def import_trades_csv(file: UploadFile = File(...)) -> dict:
+async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -> dict:
     if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Please upload a .csv file")
 
@@ -1152,6 +1307,7 @@ async def import_trades_csv(file: UploadFile = File(...)) -> dict:
                     raise ValueError("entry_date is required")
 
                 t = Trade(
+                    account_id=account_id,
                     symbol=symbol,
                     market=market,
                     trade_type=trade_type,
@@ -1178,7 +1334,7 @@ async def import_trades_csv(file: UploadFile = File(...)) -> dict:
 
 
 @app.get("/trades/export/csv")
-def export_trades_csv() -> StreamingResponse:
+def export_trades_csv(account_id: int = 1) -> StreamingResponse:
     def iter_rows():
         out = io.StringIO()
         writer = csv.writer(out)
@@ -1209,7 +1365,11 @@ def export_trades_csv() -> StreamingResponse:
         out.truncate(0)
 
         with session_scope() as s:
-            rows = s.execute(select(Trade).order_by(Trade.entry_date.asc())).scalars().all()
+            rows = s.execute(
+                select(Trade)
+                .where(Trade.account_id == account_id)
+                .order_by(Trade.entry_date.asc())
+            ).scalars().all()
             for t in rows:
                 writer.writerow(
                     [
@@ -1242,13 +1402,13 @@ def export_trades_csv() -> StreamingResponse:
 
 
 @app.get("/settings/backup.json")
-def backup_dataset() -> dict:
+def backup_dataset(account_id: int = 1) -> dict:
     with session_scope() as s:
-        trades = s.execute(select(Trade).order_by(Trade.entry_date.asc())).scalars().all()
-        assets = s.execute(select(Asset).order_by(Asset.updated_at.asc())).scalars().all()
-        psychology = s.execute(select(PsychologyEntry).order_by(PsychologyEntry.at.asc())).scalars().all()
-        lessons = s.execute(select(Lesson).order_by(Lesson.updated_at.asc())).scalars().all()
-        cash_txs = s.execute(select(CashTransaction).order_by(CashTransaction.at.asc())).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.asc())).scalars().all()
+        assets = s.execute(select(Asset).where(Asset.account_id == account_id).order_by(Asset.updated_at.asc())).scalars().all()
+        psychology = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id).order_by(PsychologyEntry.at.asc())).scalars().all()
+        lessons = s.execute(select(Lesson).join(Trade).where(Trade.account_id == account_id).order_by(Lesson.updated_at.asc())).scalars().all()
+        cash_txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
         payload = {
             "generated_at": datetime.utcnow().isoformat(),
             "trades": [_to_trade_read(t).model_dump() for t in trades],
@@ -1272,23 +1432,77 @@ def backup_dataset() -> dict:
 
 
 @app.post("/settings/clear")
-def clear_dataset() -> dict:
+def clear_dataset(account_id: int = 1) -> dict:
     with session_scope() as s:
-        deleted_psychology = s.execute(delete(PsychologyEntry)).rowcount or 0
-        deleted_lessons = s.execute(delete(Lesson)).rowcount or 0
-        deleted_cash_transactions = s.execute(delete(CashTransaction)).rowcount or 0
-        deleted_trades = s.execute(delete(Trade)).rowcount or 0
-        deleted_assets = s.execute(delete(Asset)).rowcount or 0
-        return {
-            "cleared": True,
-            "deleted": {
-                "psychology_entries": int(deleted_psychology),
-                "lessons": int(deleted_lessons),
-                "cash_transactions": int(deleted_cash_transactions),
-                "trades": int(deleted_trades),
-                "assets": int(deleted_assets),
-            },
-        }
+        s.execute(delete(PsychologyEntry).where(PsychologyEntry.account_id == account_id))
+        s.execute(delete(Lesson).where(Lesson.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
+        s.execute(delete(CashTransaction).where(CashTransaction.account_id == account_id))
+        s.execute(delete(Trade).where(Trade.account_id == account_id))
+        s.execute(delete(Asset).where(Asset.account_id == account_id))
+        return {"status": "cleared"}
+
+
+@app.post("/settings/restore")
+async def restore_dataset(file: UploadFile, account_id: int = 1):
+    content = await file.read()
+    data = json.loads(content)
+    
+    with session_scope() as s:
+        # Clear existing
+        s.execute(delete(PsychologyEntry).where(PsychologyEntry.account_id == account_id))
+        s.execute(delete(Lesson).where(Lesson.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
+        s.execute(delete(CashTransaction).where(CashTransaction.account_id == account_id))
+        s.execute(delete(Trade).where(Trade.account_id == account_id))
+        s.execute(delete(Asset).where(Asset.account_id == account_id))
+        s.flush()
+
+        old_to_new_trade_id = {}
+
+        # 1. Restore Trades
+        for t_data in data.get("trades", []):
+            old_id = t_data.pop("id", None)
+            t_data.pop("created_at", None)
+            t_data.pop("updated_at", None)
+            t = Trade(**t_data, account_id=account_id)
+            s.add(t)
+            s.flush()
+            if old_id:
+                old_to_new_trade_id[old_id] = t.id
+
+        # 2. Restore Assets
+        for a_data in data.get("assets", []):
+            a_data.pop("id", None)
+            a_data.pop("created_at", None)
+            a_data.pop("updated_at", None)
+            s.add(Asset(**a_data, account_id=account_id))
+
+        # 3. Restore Cash Transactions
+        for c_data in data.get("cash_transactions", []):
+            c_data.pop("id", None)
+            old_tid = c_data.get("trade_id")
+            if old_tid and old_tid in old_to_new_trade_id:
+                c_data["trade_id"] = old_to_new_trade_id[old_tid]
+            s.add(CashTransaction(**c_data, account_id=account_id))
+
+        # 4. Restore Psychology
+        for p_data in data.get("psychology_entries", []):
+            p_data.pop("id", None)
+            old_tid = p_data.get("trade_id")
+            if old_tid and old_tid in old_to_new_trade_id:
+                p_data["trade_id"] = old_to_new_trade_id[old_tid]
+            s.add(PsychologyEntry(**p_data, account_id=account_id))
+
+        # 5. Restore Lessons
+        for l_data in data.get("lessons", []):
+            l_data.pop("id", None)
+            l_data.pop("created_at", None)
+            l_data.pop("updated_at", None)
+            old_tid = l_data.get("trade_id")
+            if old_tid and old_tid in old_to_new_trade_id:
+                l_data["trade_id"] = old_to_new_trade_id[old_tid]
+                s.add(Lesson(**l_data))
+
+        return {"status": "restored", "trades": len(old_to_new_trade_id)}
 
 
 @app.post("/trades/{trade_id}/screenshot", response_model=TradeRead)
@@ -1453,7 +1667,11 @@ except Exception:
 
 
 @app.on_event("startup")
-def start_background_scheduler():
+def startup_event():
+    # Ensure all tables exist (idempotent — safe to run every startup)
+    from .db import engine as _engine
+    Base.metadata.create_all(bind=_engine)
+
     if BackgroundScheduler is None:
         return
     try:
@@ -1474,7 +1692,7 @@ def start_background_scheduler():
                 except Exception:
                     pass
 
-        scheduler.add_job(refresh_all_job, "interval", hours=24, id="fund_refresh_all", next_run_time=datetime.utcnow() + timedelta(seconds=10))
+        scheduler.add_job(refresh_all_job, "interval", hours=24, id="fund_refresh_all", next_run_time=datetime.utcnow() + timedelta(seconds=30))
         scheduler.start()
         app.state.scheduler = scheduler
     except Exception:
@@ -1910,3 +2128,142 @@ def portfolio_holdings() -> list[HoldingRow]:
     with session_scope() as s:
         return _compute_holdings(s)
 
+
+# --- New Analysis Endpoints ---
+
+
+from .fundamentals import refresh_fundamentals
+from .engine_technicals import refresh_technicals
+from .engine_quant import refresh_quant
+from .models import TechnicalMetrics, QuantitativeMetrics
+
+
+@app.get('/analysis/fundamentals/{symbol}')
+def get_fundamentals(symbol: str, refresh: bool = False):
+    """Get fundamental analysis for a symbol. Cache-first; refresh on demand."""
+    sym = symbol.strip().upper()
+    with session_scope() as s:
+        if not refresh:
+            m = s.execute(
+                select(StockMetrics).where(StockMetrics.symbol == sym)
+                .order_by(StockMetrics.fetched_at.desc())
+            ).scalars().first()
+            if m:
+                return {
+                    'symbol': m.symbol,
+                    'current_price': m.current_price,
+                    'market_cap': m.market_cap,
+                    'eps': m.eps,
+                    'pe_ratio': m.pe_ratio,
+                    'peg_ratio': m.peg_ratio,
+                    'ev_ebitda': m.ev_ebitda,
+                    'fair_value_pe': m.fair_value_pe,
+                    'fair_value_peg': m.fair_value_peg,
+                    'revenue_growth': m.revenue_growth,
+                    'eps_growth': m.eps_growth,
+                    'roe': m.roe,
+                    'net_profit_margin': m.net_profit_margin,
+                    'debt_to_equity': m.debt_to_equity,
+                    'current_ratio': m.current_ratio,
+                    'free_cash_flow': m.free_cash_flow,
+                    'fcf_yield': m.fcf_yield,
+                    'fundamental_score': m.fundamental_score,
+                    'fetched_at': m.fetched_at,
+                    'provider': m.provider,
+                }
+
+        # Fetch / Refresh from provider
+        try:
+            refresh_fundamentals(s, sym)
+            m = s.execute(
+                select(StockMetrics).where(StockMetrics.symbol == sym)
+                .order_by(StockMetrics.fetched_at.desc())
+            ).scalars().first()
+            if m:
+                return {
+                    'symbol': m.symbol,
+                    'current_price': m.current_price,
+                    'market_cap': m.market_cap,
+                    'eps': m.eps,
+                    'pe_ratio': m.pe_ratio,
+                    'peg_ratio': m.peg_ratio,
+                    'ev_ebitda': m.ev_ebitda,
+                    'fair_value_pe': m.fair_value_pe,
+                    'fair_value_peg': m.fair_value_peg,
+                    'revenue_growth': m.revenue_growth,
+                    'eps_growth': m.eps_growth,
+                    'roe': m.roe,
+                    'net_profit_margin': m.net_profit_margin,
+                    'debt_to_equity': m.debt_to_equity,
+                    'current_ratio': m.current_ratio,
+                    'free_cash_flow': m.free_cash_flow,
+                    'fcf_yield': m.fcf_yield,
+                    'fundamental_score': m.fundamental_score,
+                    'fetched_at': m.fetched_at,
+                    'provider': m.provider,
+                }
+            raise HTTPException(status_code=404, detail='No fundamentals data available')
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Failed to fetch fundamentals: {e}')
+
+
+@app.get('/analysis/technical/{symbol}')
+def get_technical(symbol: str, period: str = '1y', interval: str = '1d', refresh: bool = False):
+    """Get technical indicators for a symbol. Cache-first; refresh on demand."""
+    sym = symbol.strip().upper()
+    with session_scope() as s:
+        if not refresh:
+            m = s.execute(
+                select(TechnicalMetrics).where(TechnicalMetrics.symbol == sym)
+                .order_by(TechnicalMetrics.fetched_at.desc())
+            ).scalars().first()
+            if m:
+                payload = json.loads(m.payload) if isinstance(m.payload, str) else (m.payload or {})
+                return {
+                    'symbol': m.symbol,
+                    'score': m.score,
+                    'signal': m.signal,
+                    'payload': payload,
+                    'fetched_at': m.fetched_at,
+                }
+
+        try:
+            result = refresh_technicals(s, sym)
+            return result
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Failed to fetch technical data: {e}')
+
+
+@app.get('/analysis/smart-money/{symbol}')
+def get_smart_money(symbol: str, period: str = '6m', interval: str = '1d', refresh: bool = False):
+    """Get smart-money / quantitative flow indicators for a symbol."""
+    sym = symbol.strip().upper()
+    with session_scope() as s:
+        if not refresh:
+            m = s.execute(
+                select(QuantitativeMetrics).where(QuantitativeMetrics.symbol == sym)
+                .order_by(QuantitativeMetrics.fetched_at.desc())
+            ).scalars().first()
+            if m:
+                payload = json.loads(m.payload) if isinstance(m.payload, str) else (m.payload or {})
+                return {
+                    'symbol': m.symbol,
+                    'score': m.score,
+                    'signal': m.signal,
+                    'payload': payload,
+                    'fetched_at': m.fetched_at,
+                }
+
+        try:
+            result = refresh_quant(s, sym)
+            return result
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Failed to fetch smart-money data: {e}')
+
+
+@app.get('/analysis/quant/{symbol}')
+def get_quant_live(symbol: str, period: str = '6m', interval: str = '1d', refresh: bool = False):
+    """Alias for smart-money — live quantitative analysis by ticker symbol."""
+    return get_smart_money(symbol=symbol, period=period, interval=interval, refresh=refresh)

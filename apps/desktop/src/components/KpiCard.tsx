@@ -1,13 +1,20 @@
-import type { ReactNode } from 'react'
+type Tone = 'good' | 'bad' | 'neutral' | undefined
 
-export function KpiCard(props: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'good' | 'bad' | 'neutral'; tooltip?: string }) {
-  const toneClass = props.tone ? `tone-${props.tone}` : ''
+interface KpiCardProps {
+  label: string
+  value: string
+  sub?: string
+  tone?: Tone
+  tooltip?: string
+}
+
+export function KpiCard({ label, value, sub, tone, tooltip }: KpiCardProps) {
+  const toneClass = tone ? `tone-${tone}` : ''
   return (
-    <div className={`card kpi ${toneClass}`} title={props.tooltip ?? undefined}>
-      <div className="kpiLabel">{props.label}</div>
-      <div className="kpiValue">{props.value}</div>
-      {props.sub ? <div className="kpiSub">{props.sub}</div> : null}
+    <div className={`card kpi ${toneClass}`} title={tooltip}>
+      <div className="kpiLabel">{label}</div>
+      <div className="kpiValue">{value}</div>
+      {sub && <div className="kpiSub">{sub}</div>}
     </div>
   )
 }
-

@@ -68,16 +68,20 @@ def portfolio_value_with_unrealized(trades: Sequence[Trade], txs: Sequence[CashT
 
 
 def realized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date) -> float:
-    """Sum of closed-trade PnL for exits on or before ``as_of_day`` (calendar date)."""
+    """Sum of closed-trade PnL for exits on or before ``as_of_day`` (calendar date).
+    Robust to missing exit_date by falling back to entry_date.
+    """
     total = 0.0
     for t in trades:
-        if t.exit_price is None or t.exit_date is None:
+        if t.exit_price is None:
             continue
-        xd = t.exit_date.date() if hasattr(t.exit_date, "date") else t.exit_date
+        pnl = calc_pnl(t)
+        if pnl is None:
+            continue
+        dt = t.exit_date or t.entry_date
+        xd = dt.date() if hasattr(dt, "date") else dt
         if xd <= as_of_day:
-            pnl = calc_pnl(t)
-            if pnl is not None:
-                total += float(pnl)
+            total += float(pnl)
     return float(total)
 
 

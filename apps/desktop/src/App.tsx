@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { StockFundamentalsPage } from './pages/StockFundamentalsPage'
 import { TechnicalAnalysisPage } from './pages/TechnicalAnalysisPage'
 import { SmartMoneyPage } from './pages/SmartMoneyPage'
+import { CashPage } from './pages/CashPage'
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/fundamentals" element={<StockFundamentalsPage />} />
           <Route path="/technical" element={<TechnicalAnalysisPage />} />
           <Route path="/smart-money" element={<SmartMoneyPage />} />
+          <Route path="/cash" element={<CashPage />} />
           <Route path="/coach" element={<AiCoachPage />} />
           <Route path="/risk" element={<RiskPage />} />
           <Route path="/settings" element={<SettingsPage />} />

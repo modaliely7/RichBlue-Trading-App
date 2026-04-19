@@ -3,6 +3,17 @@ export type TradeType = 'Long' | 'Short'
 
 export type PsychologyState = 'Confident' | 'Fear' | 'FOMO' | 'Calm' | 'Overtrading'
 
+export type AccountType = 'Real' | 'Testing'
+
+export type Account = {
+  id: number
+  name: string
+  account_type: AccountType
+  created_at: string
+}
+
+export type AccountCreate = Omit<Account, 'id' | 'created_at'>
+
 export type PsychologyEntry = {
   id: number
   state: PsychologyState
@@ -293,31 +304,38 @@ async function download(path: string): Promise<Blob> {
 }
 
 export const api = {
-  listTrades: () => apiFetch<Trade[]>('/trades'),
-  createTrade: (payload: TradeCreate) =>
-    apiFetch<Trade>('/trades', { method: 'POST', body: JSON.stringify(payload) }),
+  listAccounts: () => apiFetch<Account[]>('/accounts'),
+  createAccount: (payload: AccountCreate) => apiFetch<Account>('/accounts', { method: 'POST', body: JSON.stringify(payload) }),
+  getAccount: (id: number) => apiFetch<Account>(`/accounts/${id}`),
+  updateAccount: (id: number, payload: Partial<AccountCreate>) => apiFetch<Account>(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteAccount: (id: number) => apiFetch<{ deleted: true }>(`/accounts/${id}`, { method: 'DELETE' }),
+
+  listTrades: (accountId: number = 1) => apiFetch<Trade[]>(`/trades?account_id=${accountId}`),
+  createTrade: (payload: TradeCreate, accountId: number = 1) =>
+    apiFetch<Trade>(`/trades?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
   updateTrade: (id: number, payload: TradeUpdate) =>
     apiFetch<Trade>(`/trades/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   uploadScreenshot: (id: number, file: File) => uploadFile<Trade>(`/trades/${id}/screenshot`, file),
   deleteTradeScreenshot: (id: number) => apiFetch<Trade>(`/trades/${id}/screenshot`, { method: 'DELETE' }),
-  importTradesCsv: (file: File) => uploadFile<{ inserted: number; total_errors: number; errors: Array<{ row: number; error: string }> }>(
-    '/trades/import/csv',
+  importTradesCsv: (file: File, accountId: number = 1) => uploadFile<{ inserted: number; total_errors: number; errors: Array<{ row: number; error: string }> }>(
+    `/trades/import/csv?account_id=${accountId}`,
     file,
   ),
-  exportTradesCsv: () => download('/trades/export/csv'),
+  exportTradesCsv: (accountId: number = 1) => download(`/trades/export/csv?account_id=${accountId}`),
   deleteTrade: (id: number) => apiFetch<{ deleted: true }>(`/trades/${id}`, { method: 'DELETE' }),
 
-  listPsychology: () => apiFetch<PsychologyEntry[]>('/psychology'),
+  listPsychology: (accountId: number = 1) => apiFetch<PsychologyEntry[]>(`/psychology?account_id=${accountId}`),
   createPsychology: (payload: PsychologyCreate) =>
     apiFetch<PsychologyEntry>('/psychology', { method: 'POST', body: JSON.stringify(payload) }),
   deletePsychology: (id: number) => apiFetch<{ deleted: true }>(`/psychology/${id}`, { method: 'DELETE' }),
-  psychologySummary: () => apiFetch<PsychologySummaryRow[]>('/psychology/summary'),
+  psychologySummary: (accountId: number = 1) => apiFetch<PsychologySummaryRow[]>(`/psychology/summary?account_id=${accountId}`),
 
   insights: () => apiFetch<InsightsResponse>('/insights'),
-  performanceAnalytics: (params: { start?: string; end?: string } = {}) => {
+  performanceAnalytics: (params: { start?: string; end?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
     if (params.start) q.set('start', params.start)
     if (params.end) q.set('end', params.end)
+    if (params.account_id) q.set('account_id', String(params.account_id))
     const suffix = q.toString() ? `?${q.toString()}` : ''
     return apiFetch<PerformanceAnalyticsResponse>(`/performance/analytics${suffix}`)
   },
@@ -327,8 +345,8 @@ export const api = {
   updateAsset: (id: number, payload: AssetUpdate) =>
     apiFetch<Asset>(`/assets/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteAsset: (id: number) => apiFetch<{ deleted: true }>(`/assets/${id}`, { method: 'DELETE' }),
-  portfolioSummary: () => apiFetch<PortfolioSummary>('/portfolio/summary'),
-  portfolioHoldings: () => apiFetch<HoldingRow[]>('/portfolio/holdings'),
+  portfolioSummary: (accountId: number = 1) => apiFetch<PortfolioSummary>(`/portfolio/summary?account_id=${accountId}`),
+  portfolioHoldings: (accountId: number = 1) => apiFetch<HoldingRow[]>(`/portfolio/holdings?account_id=${accountId}`),
 
   quantIndicators: (file: File, query: Record<string, string | number> = {}) =>
     uploadFileWithQuery<QuantIndicatorsResponse>('/quant/indicators', file, query),
@@ -344,19 +362,19 @@ export const api = {
     apiFetch<Lesson>('/lessons', { method: 'POST', body: JSON.stringify(payload) }),
   deleteLesson: (id: number) => apiFetch<{ deleted: true }>(`/lessons/${id}`, { method: 'DELETE' }),
 
-  downloadPerformancePdf: () => download('/reports/performance.pdf'),
+  downloadPerformancePdf: (accountId: number = 1) => download(`/reports/performance.pdf?account_id=${accountId}`),
 
-  overview: (method?: string) => {
+  overview: (accountId: number = 1, method?: string) => {
     const q = new URLSearchParams()
+    q.set('account_id', String(accountId))
     if (method) q.set('method', method)
-    const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<OverviewResponse>(`/overview${suffix}`)
+    return apiFetch<OverviewResponse>(`/overview?${q.toString()}`)
   },
   fundamentals: (symbol: string, refresh: boolean = false) => {
     const q = new URLSearchParams()
     if (refresh) q.set('refresh', '1')
     const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/fundamentals/${encodeURIComponent(symbol)}${suffix}`)
+    return apiFetch<any>(`/analysis/fundamentals/${encodeURIComponent(symbol)}${suffix}`)
   },
 
   technicalIndicators: (symbol: string, period: string = '1y', interval: string = '1d') => {
@@ -364,30 +382,47 @@ export const api = {
     if (period) q.set('period', period)
     if (interval) q.set('interval', interval)
     const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/technical/${encodeURIComponent(symbol)}${suffix}`)
+    return apiFetch<any>(`/analysis/technical/${encodeURIComponent(symbol)}${suffix}`)
   },
 
-  smartMoney: (symbol: string, period: string = '1y', interval: string = '1d') => {
+  quantLive: (symbol: string, period: string = '6m', interval: string = '1d') => {
     const q = new URLSearchParams()
     if (period) q.set('period', period)
     if (interval) q.set('interval', interval)
     const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/smart-money/${encodeURIComponent(symbol)}${suffix}`)
+    return apiFetch<any>(`/analysis/quant/${encodeURIComponent(symbol)}${suffix}`)
   },
 
-  cashBalance: () => apiFetch<CashBalanceResponse>('/cash/balance'),
-  cashTransactions: () => apiFetch<CashTx[]>('/cash/transactions'),
-  cashDeposit: (payload: { amount: number; at?: string; note?: string }) =>
-    apiFetch<DepositResponse>('/cash/deposit', { method: 'POST', body: JSON.stringify(payload) }),
-  cashWithdraw: (payload: { amount: number; at?: string; note?: string }) =>
-    apiFetch<CashBalanceResponse>('/cash/withdraw', { method: 'POST', body: JSON.stringify(payload) }),
-  cashAdjust: (payload: { amount: number; at?: string; note?: string }) =>
-    apiFetch<CashBalanceResponse>('/cash/adjust', { method: 'POST', body: JSON.stringify(payload) }),
+  smartMoney: (symbol: string, period: string = '6m', interval: string = '1d') => {
+    const q = new URLSearchParams()
+    if (period) q.set('period', period)
+    if (interval) q.set('interval', interval)
+    const suffix = q.toString() ? `?${q.toString()}` : ''
+    return apiFetch<any>(`/analysis/smart-money/${encodeURIComponent(symbol)}${suffix}`)
+  },
 
-  backupDataset: () => download('/settings/backup.json'),
-  clearDataset: () =>
-    apiFetch<{ cleared: true; deleted: Record<string, number> }>('/settings/clear', {
+  cashBalance: (accountId: number = 1) => apiFetch<CashBalanceResponse>(`/cash/balance?account_id=${accountId}`),
+  cashTransactions: (accountId: number = 1) => apiFetch<CashTx[]>(`/cash/transactions?account_id=${accountId}`),
+  cashDeposit: (payload: { amount: number; at?: string; note?: string }, accountId: number = 1) =>
+    apiFetch<DepositResponse>(`/cash/deposit?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  cashWithdraw: (payload: { amount: number; at?: string; note?: string }, accountId: number = 1) =>
+    apiFetch<CashBalanceResponse>(`/cash/withdraw?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  cashAdjust: (payload: { amount: number; at?: string; note?: string }, accountId: number = 1) =>
+    apiFetch<CashBalanceResponse>(`/cash/adjust?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  deleteCashTransaction: (id: number) => apiFetch<{ deleted: true }>(`/cash/transactions/${id}`, { method: 'DELETE' }),
+  updateCashTransaction: (id: number, payload: { amount: number; at?: string; note?: string }) => 
+    apiFetch<CashTx>(`/cash/transactions/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  backupDataset: (accountId: number = 1) => download(`/settings/backup.json?account_id=${accountId}`),
+  clearDataset: (accountId: number = 1) =>
+    apiFetch<{ status: string }>(`/settings/clear?account_id=${accountId}`, { method: 'POST' }),
+  restoreDataset: (file: File, accountId: number = 1) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return apiFetch<{ status: string; trades: number }>(`/settings/restore?account_id=${accountId}`, {
       method: 'POST',
-    }),
+      body: fd,
+    })
+  },
 }
 

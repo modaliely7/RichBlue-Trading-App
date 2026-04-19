@@ -45,20 +45,35 @@ def fetch_price_and_fundamentals_yfinance(symbol: str) -> dict[str, Any]:
     balance = {}
     cashflow = {}
     earnings = {}
+
+    def _df_to_str_dict(df):
+        """Convert DataFrame to dict, ensuring all keys are strings (pandas uses Timestamp keys)."""
+        try:
+            if df is None:
+                return {}
+            raw = df.to_dict()
+            # raw is {row_label: {col_timestamp: value, ...}, ...}
+            return {
+                str(row_k): {str(col_k): v for col_k, v in col_dict.items()}
+                for row_k, col_dict in raw.items()
+            }
+        except Exception:
+            return {}
+
     try:
-        financials = tk.financials.to_dict() if hasattr(tk, "financials") and tk.financials is not None else {}
+        financials = _df_to_str_dict(tk.financials if hasattr(tk, 'financials') and tk.financials is not None else None)
     except Exception:
         financials = {}
     try:
-        balance = tk.balance_sheet.to_dict() if hasattr(tk, "balance_sheet") and tk.balance_sheet is not None else {}
+        balance = _df_to_str_dict(tk.balance_sheet if hasattr(tk, 'balance_sheet') and tk.balance_sheet is not None else None)
     except Exception:
         balance = {}
     try:
-        cashflow = tk.cashflow.to_dict() if hasattr(tk, "cashflow") and tk.cashflow is not None else {}
+        cashflow = _df_to_str_dict(tk.cashflow if hasattr(tk, 'cashflow') and tk.cashflow is not None else None)
     except Exception:
         cashflow = {}
     try:
-        earnings = tk.earnings.to_dict() if hasattr(tk, "earnings") and tk.earnings is not None else {}
+        earnings = _df_to_str_dict(tk.earnings if hasattr(tk, 'earnings') and tk.earnings is not None else None)
     except Exception:
         earnings = {}
 
@@ -201,7 +216,14 @@ def fetch_price_history_yfinance(symbol: str, period: str = "1y", interval: str 
     if yf is None:
         raise RuntimeError("yfinance not installed")
     tk = yf.Ticker(symbol)
-    hist = tk.history(period=period, interval=interval)
+    hist = pd.DataFrame()
+    for _ in range(3):
+        try:
+            hist = tk.history(period=period, interval=interval, auto_adjust=False)
+            if not hist.empty:
+                break
+        except Exception:
+            pass
     rows: list[dict] = []
     for idx, row in hist.iterrows():
         rows.append(

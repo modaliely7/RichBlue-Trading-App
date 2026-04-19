@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -23,10 +23,26 @@ class TradeType(str, enum.Enum):
     short = "Short"
 
 
+class AccountType(str, enum.Enum):
+    real = "Real"
+    testing = "Testing"
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    account_type: Mapped[AccountType] = mapped_column(Enum(AccountType), default=AccountType.real)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class Trade(Base):
     __tablename__ = "trades"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
 
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     market: Mapped[Market] = mapped_column(Enum(Market), default=Market.stocks, index=True)
@@ -65,6 +81,7 @@ class PsychologyEntry(Base):
     __tablename__ = "psychology_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
 
     state: Mapped[PsychologyState] = mapped_column(Enum(PsychologyState), index=True)
     intensity: Mapped[int] = mapped_column(Integer, default=3)  # 1..5
@@ -87,6 +104,7 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
 
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     asset_class: Mapped[AssetClass] = mapped_column(Enum(AssetClass), index=True)
@@ -178,6 +196,32 @@ class SmartMoneySignal(Base):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class TechnicalMetrics(Base):
+    __tablename__ = "technical_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signal: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class QuantitativeMetrics(Base):
+    __tablename__ = "quantitative_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signal: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+
+
 class LessonCategory(str, enum.Enum):
     mistake = "Mistake"
     lesson = "Lesson"
@@ -214,6 +258,7 @@ class CashTransaction(Base):
     __tablename__ = "cash_transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
 
     # +amount = inflow, -amount = outflow
     amount: Mapped[float] = mapped_column(Float)

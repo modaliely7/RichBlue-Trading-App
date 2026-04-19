@@ -4,7 +4,28 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, TradeType
+from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, TradeType, AccountType
+
+
+class AccountBase(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    account_type: AccountType = AccountType.real
+
+
+class AccountCreate(AccountBase):
+    pass
+
+
+class AccountUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    account_type: AccountType | None = None
+    is_active: bool | None = None
+
+
+class AccountRead(AccountBase):
+    id: int
+    is_active: bool
+    created_at: datetime
 
 
 class TradeBase(BaseModel):
@@ -219,6 +240,13 @@ class CashTxBase(BaseModel):
 
 class CashTxRead(CashTxBase):
     id: int
+
+
+class CashTxUpdate(BaseModel):
+    amount: float | None = None
+    tx_type: CashTxType | None = None
+    at: datetime | None = None
+    note: str | None = None
 
 
 class CashDepositRequest(BaseModel):

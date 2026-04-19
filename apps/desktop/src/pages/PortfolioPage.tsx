@@ -5,6 +5,7 @@ import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api } from '../lib/api'
 import type { HoldingRow } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 import '../lib/charts'
 
 function pieSliceColors(n: number): { bg: string[]; border: string[] } {
@@ -19,8 +20,12 @@ function pieSliceColors(n: number): { bg: string[]; border: string[] } {
 }
 
 export function PortfolioPage() {
+  const { currentAccount } = useAccount()
   const [method, setMethod] = useState<string>('realized')
-  const { data: ov, isLoading, error } = useQuery({ queryKey: ['overview', method], queryFn: () => api.overview(method) })
+  const { data: ov, isLoading, error } = useQuery({ 
+    queryKey: ['overview', currentAccount?.id, method], 
+    queryFn: () => api.overview(currentAccount?.id ?? 1, method) 
+  })
 
   const holdings = useMemo(() => ov?.holdings ?? [], [ov])
   const openHoldings = useMemo(
@@ -31,8 +36,26 @@ export function PortfolioPage() {
     [holdings],
   )
 
+  const metrics = useMemo(() => {
+    const cash = Number(ov?.kpis.cash_balance ?? 0)
+    const netDep = Number(ov?.kpis.net_deposited ?? 0)
+    const realizedPnl = Number(ov?.kpis.realized_pnl_total ?? 0)
+    const assetsCost = Number(ov?.kpis.assets_market_value ?? 0)
+    
+    const pv = Number(ov?.kpis.portfolio_value ?? 0)
+    const totalPnL = Number(ov?.kpis.total_return_value ?? 0)
+    const returnPct = Number(ov?.kpis.total_return_pct ?? 0)
+    
+    // Ledger validation (Cash + Cost Basis should equal Net Dep + Realized PnL)
+    const realizedFromLedger = cash + assetsCost
+    const realizedFromPnL = netDep + realizedPnl
+    const mismatch = Math.abs(realizedFromLedger - realizedFromPnL) > 0.01
+    
+    return { pv, totalPnL, returnPct, realizedFromLedger, realizedFromPnL, mismatch, netDep, realizedPnl, cash, assetsCost }
+  }, [ov])
+
   const portfolioPie = useMemo(() => {
-    const cashVal = Number(ov?.kpis.cash_balance ?? 0)
+    const cashVal = metrics.cash
     const fundsVal = Number(ov?.allocation?.Funds ?? 0)
     const labels: string[] = []
     const values: number[] = []
@@ -41,7 +64,7 @@ export function PortfolioPage() {
       values.push(cashVal)
     }
     for (const h of openHoldings) {
-      const v = Number(h.open_cost_basis ?? 0)
+      const v = Number((method === 'liquidation' ? h.market_value : h.open_cost_basis) ?? 0)
       if (v > 1e-9) {
         labels.push(h.symbol)
         values.push(v)
@@ -55,14 +78,7 @@ export function PortfolioPage() {
     const pct = total > 0 ? values.map((v) => (v / total) * 100) : []
     const { bg, border } = pieSliceColors(labels.length)
     return { labels, values, pct, total, bg, border }
-  }, [ov?.kpis.cash_balance, ov?.allocation?.Funds, openHoldings])
-
-  const ledgerVsHeadline = useMemo(() => {
-    const pv = Number(ov?.kpis.portfolio_value ?? 0)
-    const ledger = Number(ov?.kpis.cash_balance ?? 0) + Number(ov?.kpis.assets_market_value ?? 0)
-    const tol = Math.max(0.05, 1e-9 * Math.max(Math.abs(pv), Math.abs(ledger), 1))
-    return { pv, ledger, mismatch: Math.abs(pv - ledger) > tol }
-  }, [ov?.kpis.portfolio_value, ov?.kpis.cash_balance, ov?.kpis.assets_market_value])
+  }, [metrics.cash, ov?.allocation?.Funds, openHoldings, method])
 
   return (
     <div className="page">
@@ -86,64 +102,50 @@ export function PortfolioPage() {
       <div className="grid kpis">
         <div className="card kpi">
           <div className="kpiLabel">Portfolio value</div>
-          <div className="kpiValue">{formatCurrency(Number(ov?.kpis.portfolio_value ?? 0))}</div>
-          <div className="kpiSub">Free Cash + Market Value of Open Positions</div>
+          <div className="kpiValue">{formatCurrency(metrics.pv)}</div>
+          <div className="kpiSub">{method === 'realized' ? 'Net Deposited + Realized P/L' : 'Cash + Market Value'}</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Free cash</div>
-          <div className="kpiValue">{formatCurrency(Number(ov?.kpis.cash_balance ?? 0))}</div>
+          <div className="kpiValue">{formatCurrency(metrics.cash)}</div>
           <div className="kpiSub">Cash ledger balance</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Invested Capital (Cost)</div>
-          <div className="kpiValue">{formatCurrency(Number(ov?.kpis.assets_market_value ?? 0))}</div>
+          <div className="kpiValue">{formatCurrency(metrics.assetsCost)}</div>
           <div className="kpiSub">Open positions cost basis</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Net deposited</div>
-          <div className="kpiValue">{formatCurrency(Number(ov?.kpis.net_deposited ?? 0))}</div>
+          <div className="kpiValue">{formatCurrency(metrics.netDep)}</div>
           <div className="kpiSub">Deposits − withdrawals</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Total PnL</div>
-          <div className={`kpiValue ${Number(ov?.kpis.total_return_value ?? 0) >= 0 ? 'good' : 'bad'}`}>
-            {formatCurrency(Number(ov?.kpis.total_return_value ?? 0))}
+          <div className={`kpiValue ${metrics.totalPnL >= 0 ? 'good' : 'bad'}`}>
+            {formatCurrency(metrics.totalPnL)}
           </div>
-          <div className="kpiSub">Realized + Unrealized PnL (Portfolio − Net Deposited)</div>
+          <div className="kpiSub">Portfolio Value − Net Deposited</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Return %</div>
-          <div className="kpiValue">{ov?.kpis.total_return_pct == null ? '—' : formatPct(Number(ov.kpis.total_return_pct))}</div>
+          <div className="kpiValue">{formatPct(metrics.returnPct)}</div>
           <div className="kpiSub">On net deposited</div>
         </div>
         <div className="card kpi">
           <div className="kpiLabel">Realized P/L (closed)</div>
-          <div className={`kpiValue ${Number(ov?.kpis.realized_pnl_total ?? 0) >= 0 ? 'good' : 'bad'}`}>
-            {formatCurrency(Number(ov?.kpis.realized_pnl_total ?? 0))}
+          <div className={`kpiValue ${metrics.realizedPnl >= 0 ? 'good' : 'bad'}`}>
+            {formatCurrency(metrics.realizedPnl)}
           </div>
           <div className="kpiSub">Sum of closed trades only</div>
         </div>
       </div>
 
-      <div className="card panel" style={{ marginTop: 12 }}>
-        <div className="panelTitle">How this adds up</div>
-        <div className="muted" style={{ marginTop: 8, lineHeight: 1.65, fontSize: 14 }}>
-          <p style={{ margin: '0 0 10px' }}>
-            <strong>Portfolio value</strong> = <strong>Free Cash</strong> + <strong>Market Value of Open Positions</strong>.
-            <strong>Total PnL</strong> = Realized PnL + Unrealized PnL; equivalently, Portfolio − Net Deposited.
-          </p>
-          <p style={{ margin: '0 0 10px' }}>
-            The pie and ledger view show cost-based slices (cash + invested capital). If a mismatch appears, check for fund positions outside
-            trades or manual cash adjustments.
-          </p>
-        </div>
-      </div>
 
       <div className="card panel" style={{ marginTop: 12 }}>
         <div className="panelTitle">Portfolio mix (pie)</div>
             <div className="muted" style={{ marginTop: 6 }}>
-          Ledger view: cash plus each open stock at cost plus funds at average cost. The sum should match <strong>portfolio value</strong> when
-          all wealth comes from deposits and journal trades.
+          Ledger view: cash plus each open stock at cost (or market value) plus funds at average cost.
         </div>
         {portfolioPie.total <= 0 ? (
           <div className="muted" style={{ marginTop: 16 }}>
@@ -151,7 +153,7 @@ export function PortfolioPage() {
           </div>
         ) : (
           <>
-            <div style={{ height: 320, maxWidth: 420, margin: '12px auto 0' }}>
+            <div className="chartWrapper" style={{ maxWidth: 420, margin: '12px auto 0' }}>
               <Pie
                 data={{
                   labels: portfolioPie.labels,
@@ -185,9 +187,9 @@ export function PortfolioPage() {
             <div className="muted" style={{ marginTop: 10, textAlign: 'center' }}>
               Pie total (cash + holdings at cost): <span className="mono">{formatCurrency(portfolioPie.total)}</span>
             </div>
-            {ledgerVsHeadline.mismatch ? (
+            {metrics.mismatch && method === 'realized' ? (
               <div className="error" style={{ marginTop: 10, fontSize: 13, textAlign: 'center' }}>
-                Pie total {formatCurrency(ledgerVsHeadline.ledger)} ≠ portfolio value {formatCurrency(ledgerVsHeadline.pv)}. Check fund positions
+                Pie total {formatCurrency(metrics.realizedFromLedger)} ≠ realized portfolio value {formatCurrency(metrics.realizedFromPnL)}. Check fund positions
                 outside trades or cash adjustments.
               </div>
             ) : null}

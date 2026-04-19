@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { api, type Trade } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n))
@@ -16,7 +17,11 @@ function dayKeyLocal(d: Date) {
 }
 
 export function RiskPage() {
-  const { data, isLoading, error } = useQuery({ queryKey: ['trades'], queryFn: api.listTrades })
+  const { currentAccount } = useAccount()
+  const { data, isLoading, error } = useQuery({ 
+    queryKey: ['trades', currentAccount?.id], 
+    queryFn: () => api.listTrades(currentAccount?.id ?? 1) 
+  })
 
   const [account, setAccount] = useState(10_000)
   const [riskPct, setRiskPct] = useState(1)
@@ -35,12 +40,12 @@ export function RiskPage() {
   }, [account, riskPct, entry, stop])
 
   const monitors = useMemo(() => {
-    const trades = data ?? []
+    const trades = (data as Trade[]) ?? []
     const closed = trades
-      .filter((t) => t.exit_price != null && t.pnl != null)
+      .filter((t: Trade) => t.exit_price != null && t.pnl != null)
       .slice()
       .sort(
-        (a, b) =>
+        (a: Trade, b: Trade) =>
           new Date(a.exit_date ?? a.entry_date).getTime() -
           new Date(b.exit_date ?? b.entry_date).getTime(),
       )

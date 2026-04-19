@@ -4,6 +4,7 @@ import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, tradeScreenshotPublicUrl, type OverviewResponse } from '../lib/api'
 import type { Market, Trade, TradeCreate, TradeUpdate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 const SYMBOLS_KEY = 'tradingJournal.savedSymbols.v1'
 
@@ -75,8 +76,12 @@ function tradeToDraft(t: Trade): TradeDraft {
 }
 
 export function JournalPage() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
-  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ queryKey: ['overview'], queryFn: () => api.overview() })
+  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ 
+    queryKey: ['overview', currentAccount?.id], 
+    queryFn: () => api.overview(currentAccount?.id ?? 1) 
+  })
   const now = useMemo(() => new Date(), [])
   const defaultEntry = useMemo(() => toDatetimeLocalValue(now.toISOString()), [now])
 
@@ -119,9 +124,9 @@ export function JournalPage() {
   }, [lightboxUrl])
 
   const createMutation = useMutation({
-    mutationFn: (payload: TradeCreate) => api.createTrade(payload),
+    mutationFn: (payload: TradeCreate) => api.createTrade(payload, currentAccount?.id ?? 1),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       saveSymbol(symbol.trim().toUpperCase())
       setSymbol('')
       setExitPriceStr('')
@@ -135,7 +140,7 @@ export function JournalPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: TradeUpdate }) => api.updateTrade(id, payload),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       setEditMode(false)
       setDraft(null)
     },
@@ -144,7 +149,7 @@ export function JournalPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteTrade(id),
     onSuccess: async (_data, deletedId) => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       setSelectedId((cur) => (cur === deletedId ? null : cur))
     },
   })
@@ -152,21 +157,21 @@ export function JournalPage() {
   const uploadMutation = useMutation({
     mutationFn: ({ id, file }: { id: number; file: File }) => api.uploadScreenshot(id, file),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
     },
   })
 
   const deleteScreenshotMutation = useMutation({
     mutationFn: (id: number) => api.deleteTradeScreenshot(id),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
     },
   })
 
   const importMutation = useMutation({
-    mutationFn: (file: File) => api.importTradesCsv(file),
+    mutationFn: (file: File) => api.importTradesCsv(file, currentAccount?.id ?? 1),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       alert('Import completed')
     },
     onError: (err) => alert(String(err)),
@@ -427,7 +432,7 @@ export function JournalPage() {
         {createMutation.error ? <div className="error">Failed to create trade.</div> : null}
       </div>
 
-      <div className="tradeSplit" style={{ marginTop: 12 }}>
+      <div className="tradeSplit" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, alignItems: 'start' }}>
         <div className="card panel">
           <div className="panelTitleRow">
             <div className="panelTitle">Trades</div>
@@ -752,7 +757,7 @@ export function JournalPage() {
             className="btn"
             onClick={async () => {
               try {
-                const blob = await api.exportTradesCsv()
+                const blob = await api.exportTradesCsv(currentAccount?.id ?? 1)
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
                 a.href = url

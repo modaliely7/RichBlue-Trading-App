@@ -4,6 +4,7 @@ import { Bar } from 'react-chartjs-2'
 import { api } from '../lib/api'
 import type { PerfRow } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 function TopCard(props: { title: string; row: PerfRow | null }) {
   const r = props.row
@@ -77,20 +78,22 @@ function Table(props: { title: string; rows: PerfRow[] }) {
 }
 
 export function AnalyticsPage() {
+  const { currentAccount } = useAccount()
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['performanceAnalytics', startDate, endDate],
+    queryKey: ['performanceAnalytics', currentAccount?.id, startDate, endDate],
     queryFn: () =>
       api.performanceAnalytics({
+        account_id: currentAccount?.id ?? 1,
         start: startDate ? new Date(`${startDate}T00:00:00`).toISOString() : undefined,
         end: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : undefined,
       }),
   })
 
   const pdf = useMutation({
-    mutationFn: api.downloadPerformancePdf,
+    mutationFn: () => api.downloadPerformancePdf(currentAccount?.id ?? 1),
   })
 
   const monthChart = useMemo(() => {
@@ -176,34 +179,35 @@ export function AnalyticsPage() {
           {(data?.by_month?.length ?? 0) === 0 ? (
             <div className="muted">No monthly data yet.</div>
           ) : (
-            <Bar
-              data={{
-                labels: monthChart.labels,
-                datasets: [
-                  {
-                    label: 'PnL',
-                    data: monthChart.values,
-                    backgroundColor: monthChart.values.map((v) =>
-                      v >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
-                    ),
-                    borderColor: monthChart.values.map((v) =>
-                      v >= 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
-                    ),
-                    borderWidth: 1,
+            <div className="chartWrapper small">
+              <Bar
+                data={{
+                  labels: monthChart.labels,
+                  datasets: [
+                    {
+                      label: 'PnL',
+                      data: monthChart.values,
+                      backgroundColor: monthChart.values.map((v) =>
+                        v >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
+                      ) as any,
+                      borderColor: monthChart.values.map((v) =>
+                        v >= 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
+                      ) as any,
+                      borderWidth: 1,
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    x: { ticks: { maxTicksLimit: 10, color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                    y: { ticks: { color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
                   },
-                ],
-              }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: { ticks: { maxTicksLimit: 10, color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
-                  y: { ticks: { color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
-                },
-              }}
-              height={220}
-            />
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
