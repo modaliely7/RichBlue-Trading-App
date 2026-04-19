@@ -711,6 +711,8 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             },
         )
 
+        return res
+
 
 @app.get("/cash/balance", response_model=CashBalanceResponse)
 def cash_balance(account_id: int = 1) -> CashBalanceResponse:
