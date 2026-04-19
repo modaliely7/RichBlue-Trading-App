@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2.0
+pydantic>=2.0
+alembic
+python-multipart
+pandas
+numpy
+reportlab
+pytest
+yfinance
+requests
+beautifulsoup4
+lxml
+apscheduler
+

@@ -1,0 +1,19 @@
+{
+  "name": "trading-app-curser",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently -n DESKTOP,API -c auto \"npm -w @ta/desktop run dev\" \"npm -w @ta/api run dev\"",
+    "dev:desktop": "npm -w @ta/desktop run dev",
+    "dev:api": "npm -w @ta/api run dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
