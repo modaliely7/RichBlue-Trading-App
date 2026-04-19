@@ -129,11 +129,15 @@ export function JournalPage() {
       await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
       saveSymbol(symbol.trim().toUpperCase())
       setSymbol('')
+      setEntryPriceStr('')
       setExitPriceStr('')
-      setExitDateLocal('')
+      setSizeStr('')
       setFeesStr('')
       setExitFeesStr('')
       setNotes('')
+      setStrategyUsed('Breakout')
+      setExitDateLocal('')
+      setEntryDateLocal(defaultEntry)
     },
   })
 
@@ -338,10 +342,12 @@ export function JournalPage() {
             <div className="label">Entry date</div>
             <input type="datetime-local" value={entryDateLocal} onChange={(e) => setEntryDateLocal(e.target.value)} />
           </label>
-          <label className="span2">
-            <div className="label">Exit date (optional)</div>
-            <input type="datetime-local" value={exitDateLocal} onChange={(e) => setExitDateLocal(e.target.value)} />
-          </label>
+          {hasExitOnCreate ? (
+            <label className="span2">
+              <div className="label">Exit date</div>
+              <input type="datetime-local" value={exitDateLocal || defaultEntry} onChange={(e) => setExitDateLocal(e.target.value)} />
+            </label>
+          ) : null}
           <label className="span2">
             <div className="label">Notes</div>
             <textarea value={notes} rows={3} onChange={(e) => setNotes(e.target.value)} />
@@ -418,7 +424,7 @@ export function JournalPage() {
                 strategy_used: strategyUsed.trim() || null,
                 indicators_used: null,
                 entry_date: new Date(entryDateLocal).toISOString(),
-                exit_date: exitDateLocal ? new Date(exitDateLocal).toISOString() : null,
+                exit_date: hasExitOnCreate ? new Date(exitDateLocal || defaultEntry).toISOString() : null,
                 fees: feesNum,
                 exit_fees: hasExitOnCreate ? exitFeesNum : 0,
                 notes: notes.trim() || null,

@@ -29,6 +29,20 @@ export function SettingsPage() {
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState<'Real' | 'Testing'>('Real')
 
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'default'
+  })
+
+  const applyTheme = (t: string) => {
+    setTheme(t)
+    localStorage.setItem('theme', t)
+    if (t === 'default') {
+      document.documentElement.removeAttribute('data-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', t)
+    }
+  }
+
   const backupMutation = useMutation({
     mutationFn: () => api.backupDataset(currentAccount?.id ?? 1),
     onSuccess: (blob) => {
@@ -137,7 +151,7 @@ export function SettingsPage() {
                           <option value="Testing">Testing</option>
                         </select>
                       ) : (
-                        acc.account_type
+                        acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1)
                       )}
                     </td>
                     <td>
@@ -251,6 +265,19 @@ export function SettingsPage() {
             <button className="btn btnGhost" onClick={() => setIsAddingAccount(true)}>+ Add Account</button>
           </div>
         )}
+      </div>
+
+      <div className="card panel" style={{ marginBottom: 16 }}>
+        <div className="panelTitle">Appearance</div>
+        <div style={{ marginTop: 10 }}>
+          <label>
+            <div className="label">Theme</div>
+            <select value={theme} onChange={e => applyTheme(e.target.value)} style={{ padding: 6, minWidth: 200 }}>
+              <option value="default">Default</option>
+              <option value="medred">MedRed (Neo-Brutalism)</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div className="card panel">

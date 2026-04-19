@@ -150,7 +150,7 @@ export function CalendarPage() {
             <>
               <div className="detailsLine">
                 <span className="muted">Selected Day</span>
-                <span className="mono" style={{ color: '#f8fafc', fontWeight: 700 }}>{selectedDay}</span>
+                <span className="mono" style={{ color: 'var(--text-strong)', fontWeight: 700 }}>{selectedDay}</span>
               </div>
               <div className="detailsLine">
                 <span className="muted">Daily PnL</span>
@@ -198,4 +198,5 @@ export function CalendarPage() {
     </div>
   )
 }
+
 

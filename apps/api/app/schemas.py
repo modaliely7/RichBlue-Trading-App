@@ -270,3 +270,17 @@ class CashAdjustRequest(BaseModel):
 class CashBalanceResponse(BaseModel):
     balance: float
 
+
+class SymbolMappingBase(BaseModel):
+    internal_symbol: str = Field(min_length=1, max_length=32)
+    provider_symbol: str = Field(min_length=1, max_length=64)
+    market: str | None = Field(default=None, max_length=32)
+
+
+class SymbolMappingCreate(SymbolMappingBase):
+    pass
+
+
+class SymbolMappingRead(SymbolMappingBase):
+    id: int
+

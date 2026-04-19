@@ -120,7 +120,7 @@ export function QuantPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div className={`signalBanner ${liveScore >= 60 ? 'bullish' : liveScore <= 40 ? 'bearish' : ''}`}>
                 <div>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{ld.symbol}</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--text-strong)' }}>{ld.symbol}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                     {ld.fetched_at && <>Updated: {new Date(ld.fetched_at).toLocaleString()}</>}
                   </div>
@@ -259,3 +259,4 @@ export function QuantPage() {
     </div>
   )
 }
+

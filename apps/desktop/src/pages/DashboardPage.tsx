@@ -1,10 +1,16 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bar, Line } from 'react-chartjs-2'
+import { Bar, Doughnut, Line, Radar } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
+
+// Read a CSS variable at runtime so charts adapt to theme switches
+function cssVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}
 
 function safeDiv(a: number, b: number) { return b === 0 ? 0 : a / b }
 
@@ -14,7 +20,8 @@ function filterSeriesByRange(
   labels: string[], portfolioValue: number[], netDeposited: number[],
   totalReturn: number[], liquidationValue: number[], range: ChartRange,
 ) {
-  if (!labels.length || range === 'all') return { labels, portfolio_value: portfolioValue, net_deposited: netDeposited, total_return_value: totalReturn, portfolio_value_liquidation: liquidationValue }
+  const liq = liquidationValue || []
+  if (!labels.length || range === 'all') return { labels, portfolio_value: portfolioValue, net_deposited: netDeposited, total_return_value: totalReturn, portfolio_value_liquidation: liq }
   const last = labels[labels.length - 1]
   const end = new Date(last + 'T12:00:00')
   const start = new Date(end)
@@ -23,12 +30,12 @@ function filterSeriesByRange(
   const startStr = start.toISOString().slice(0, 10)
   let i = 0
   while (i < labels.length && labels[i] < startStr) i++
-  return { 
-    labels: labels.slice(i), 
-    portfolio_value: portfolioValue.slice(i), 
-    net_deposited: netDeposited.slice(i), 
+  return {
+    labels: labels.slice(i),
+    portfolio_value: portfolioValue.slice(i),
+    net_deposited: netDeposited.slice(i),
     total_return_value: totalReturn.slice(i),
-    portfolio_value_liquidation: liquidationValue.slice(i)
+    portfolio_value_liquidation: liq.length ? liq.slice(i) : Array(labels.length - i).fill(null)
   }
 }
 
@@ -91,6 +98,25 @@ export function DashboardPage() {
     const avgWin = wins.length ? safeDiv(grossWin, wins.length) : 0
     const avgLoss = losses.length ? safeDiv(grossLoss, losses.length) : 0
 
+    // Sharpe Ratio (Simple: avg_pnl / std_dev_pnl)
+    let sharpe = 0
+    if (closed.length > 2) {
+      const avg = total / closed.length
+      const variance = pnls.reduce((s, p) => s + Math.pow(p - avg, 2), 0) / closed.length
+      const stdDev = Math.sqrt(variance)
+      sharpe = stdDev === 0 ? 0 : avg / stdDev
+    }
+
+    // Max Drawdown (from Liquidation Equity Curve)
+    const curve = ov?.chart.portfolio_value_liquidation ?? []
+    let maxDd = 0
+    let peak = -Infinity
+    for (const val of curve) {
+      if (val > peak) peak = val
+      const dd = peak - val
+      if (dd > 0 && dd > maxDd) maxDd = dd
+    }
+
     const monthlyMap = new Map<string, number>()
     for (const t of closedSorted) {
       const dt = new Date(t.exit_date ?? t.entry_date)
@@ -100,12 +126,11 @@ export function DashboardPage() {
     const monthlyLabels = Array.from(monthlyMap.keys()).sort()
     const monthlyValues = monthlyLabels.map(k => monthlyMap.get(k) ?? 0)
 
-    return { total, totalTrades: trades.length, closedTrades: closed.length, winRate, profitFactor, avgWin, avgLoss, monthlyLabels, monthlyValues }
+    return { total, totalTrades: trades.length, closedTrades: closed.length, winRate, profitFactor, avgWin, avgLoss, monthlyLabels, monthlyValues, sharpe, maxDd }
   }, [ov])
 
   const realizedPnl = Number(ov?.kpis.realized_pnl_total ?? 0)
   const portfolioValue = Number(ov?.kpis.portfolio_value ?? 0) // Realized by default
-  const unrealizedPnl = (ov?.holdings ?? []).reduce((sum, h) => sum + Number(h.unrealized_pnl ?? 0), 0)
   const totalReturnPct = Number(ov?.kpis.total_return_pct ?? 0)
 
   const chartFiltered = useMemo(() => {
@@ -143,7 +168,7 @@ export function DashboardPage() {
 
       {/* Hero KPI Cards */}
       {!isLoading && (
-        <div className="dashHero">
+        <div className="dashHero" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <div className={`heroCard ${isPositive ? 'good' : 'bad'}`}>
             <div className="heroLabel">Portfolio Value</div>
             <div className="heroValue">{formatCurrency(portfolioValue)}</div>
@@ -156,15 +181,9 @@ export function DashboardPage() {
           </div>
 
           <div className="heroCard">
-            <div className="heroLabel">Net Deposited</div>
-            <div className="heroValue">{formatCurrency(netDeposited)}</div>
-            <div className="heroSub">Total deposits minus withdrawals</div>
-          </div>
-
-          <div className={`heroCard ${unrealizedPnl >= 0 ? 'good' : 'bad'}`}>
-            <div className="heroLabel">Unrealized P/L</div>
-            <div className={`heroValue ${unrealizedPnl >= 0 ? 'good' : 'bad'}`}>{formatCurrency(unrealizedPnl)}</div>
-            <div className="heroSub">Open positions market gain/loss</div>
+            <div className="heroLabel">Invested Capital (Cost)</div>
+            <div className="heroValue">{formatCurrency(investedCapital)}</div>
+            <div className="heroSub">Total cost basis of open positions</div>
           </div>
 
           <div className={`heroCard ${realizedPnl >= 0 ? 'good' : 'bad'}`}>
@@ -172,8 +191,23 @@ export function DashboardPage() {
             <div className={`heroValue ${realizedPnl >= 0 ? 'good' : 'bad'}`}>{formatCurrency(realizedPnl)}</div>
             <div className="heroSub">Closed trades only</div>
           </div>
+
+          <div className="heroCard">
+            <div className="heroLabel">Sharpe Ratio</div>
+            <div className={`heroValue ${computed.sharpe >= 1 ? 'good' : computed.sharpe > 0 ? 'accent' : 'bad'}`}>
+              {computed.closedTrades < 3 ? '—' : computed.sharpe.toFixed(2)}
+            </div>
+            <div className="heroSub">Consistency score (target {'>'}1.0)</div>
+          </div>
+
+          <div className="heroCard">
+            <div className="heroLabel">Net Deposit</div>
+            <div className="heroValue">{formatCurrency(netDeposited)}</div>
+            <div className="heroSub">Total cash capital</div>
+          </div>
         </div>
-      )}
+      )/* Hero KPI Cards end */}
+
 
       {/* Stats Bar */}
       {!isLoading && (
@@ -205,91 +239,13 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Equity Chart */}
-      <div className="sectionTitle">Equity Curve</div>
-      <div className="card panel">
-        <div className="panelTitleRow">
-          <div>
-            <div className="panelTitle">Portfolio Value (Realized) vs Net Deposited</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Realized growth: Net Deposited + Cumulative Realized P/L</div>
-          </div>
-          <div className="detailsActions">
-            {CHART_RANGES.map(b => (
-              <button key={b.id} type="button" className={`rangeBtn ${chartRange === b.id ? 'active' : ''}`} onClick={() => setChartRange(b.id)}>{b.label}</button>
-            ))}
-          </div>
-        </div>
-        <div className="chartWrapper">
-          {chartFiltered.labels.length === 0
-            ? <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>No history yet — add trades and deposits to see the chart.</div>
-            : <Line
-                data={{
-                  labels: chartFiltered.labels,
-                  datasets: [
-                    { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
-                    { label: 'Equity (Liquidation)', data: chartFiltered.portfolio_value_liquidation, borderColor: 'rgba(56,189,248,0.5)', borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.2 },
-                    { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
-                    { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
-                  ],
-                }}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  interaction: { intersect: false, mode: 'index' },
-                  plugins: {
-                    legend: { position: 'bottom', labels: { color: '#94a3b8', usePointStyle: true, pointStyleWidth: 10, font: { size: 11 } } },
-                    tooltip: { intersect: false, mode: 'index', backgroundColor: 'rgba(4,9,20,0.95)', borderColor: 'rgba(56,189,248,0.2)', borderWidth: 1 },
-                  },
-                  scales: {
-                    x: { ticks: { maxTicksLimit: 8, color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.06)' } },
-                    y: { beginAtZero: false, ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.06)' } },
-                  },
-                }}
-              />
-          }
-        </div>
-      </div>
-
-      {/* Monthly P&L */}
-      <div className="sectionTitle">Monthly Performance</div>
-      <div className="card panel">
-        {computed.monthlyLabels.length === 0
-          ? <div className="muted" style={{ padding: '30px 0', textAlign: 'center' }}>No closed trades yet.</div>
-          : <div className="chartWrapper small">
-              <Bar
-                data={{
-                  labels: computed.monthlyLabels,
-                  datasets: [{
-                    label: 'Monthly P/L',
-                    data: computed.monthlyValues,
-                    backgroundColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(244,63,94,0.5)'),
-                    borderColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.9)' : 'rgba(244,63,94,0.9)'),
-                    borderWidth: 1, borderRadius: 4,
-                  }],
-                }}
-                options={{
-                  responsive: true, maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: { backgroundColor: 'rgba(4,9,20,0.95)', borderColor: 'rgba(56,189,248,0.2)', borderWidth: 1 },
-                  },
-                  scales: {
-                    x: { ticks: { maxTicksLimit: 12, color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.06)' } },
-                    y: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(148,163,184,0.06)' } },
-                  },
-                }}
-              />
-            </div>
-        }
-      </div>
-
-
       {/* Cash Actions */}
       <div className="sectionTitle">Cash Management</div>
-      <div className="card panel">
+      <div className="card panel" style={{ marginBottom: 24 }}>
         <div className="panelTitleRow">
           <div>
             <div className="panelTitle">Deposit / Withdraw</div>
-            <div className="muted" style={{ fontSize: 12 }}>Available: <strong style={{ color: '#f8fafc' }}>{formatCurrency(cashAvailable)}</strong></div>
+            <div className="muted" style={{ fontSize: 12 }}>Available: <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(cashAvailable)}</strong></div>
           </div>
           <button type="button" className="btnGhost btn" onClick={() => setShowCash(v => !v)}>
             {showCash ? 'Hide' : 'Show'} form
@@ -330,6 +286,174 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Equity Chart */}
+      <div className="sectionTitle">Equity Curve</div>
+      <div className="card panel">
+        <div className="panelTitleRow">
+          <div>
+            <div className="panelTitle">Portfolio Value (Realized) vs Net Deposited</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Realized growth: Net Deposited + Cumulative Realized P/L</div>
+          </div>
+          <div className="detailsActions">
+            {CHART_RANGES.map(b => (
+              <button key={b.id} type="button" className={`rangeBtn ${chartRange === b.id ? 'active' : ''}`} onClick={() => setChartRange(b.id)}>{b.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="chartWrapper">
+          {chartFiltered.labels.length === 0
+            ? <div className="muted" style={{ padding: '40px 0', textAlign: 'center' }}>No history yet — add trades and deposits to see the chart.</div>
+            : <Line
+              data={{
+                labels: chartFiltered.labels,
+                datasets: [
+                  { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
+                  { label: 'Equity (Liquidation)', data: chartFiltered.portfolio_value_liquidation, borderColor: 'rgba(56,189,248,0.5)', borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.2 },
+                  { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
+                  { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                  legend: { position: 'bottom', labels: { color: cssVar('--muted2', '#94a3b8'), usePointStyle: true, pointStyleWidth: 10, font: { size: 11 } } },
+                  tooltip: { intersect: false, mode: 'index', backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
+                },
+                scales: {
+                  x: { ticks: { maxTicksLimit: 8, color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                  y: { beginAtZero: false, ticks: { color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                },
+              }}
+            />
+          }
+        </div>
+      </div>
+
+      {/* Monthly P&L */}
+      <div className="sectionTitle">Monthly Performance</div>
+      <div className="card panel">
+        {computed.monthlyLabels.length === 0
+          ? <div className="muted" style={{ padding: '30px 0', textAlign: 'center' }}>No closed trades yet.</div>
+          : <div className="chartWrapper small">
+            <Bar
+              data={{
+                labels: computed.monthlyLabels,
+                datasets: [{
+                  label: 'Monthly P/L',
+                  data: computed.monthlyValues,
+                  backgroundColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(244,63,94,0.5)'),
+                  borderColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.9)' : 'rgba(244,63,94,0.9)'),
+                  borderWidth: 1, borderRadius: 4,
+                }],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
+                },
+                scales: {
+                  x: { ticks: { maxTicksLimit: 12, color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                  y: { ticks: { color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                },
+              }}
+            />
+          </div>
+        }
+      </div>
+
+      {/* Portfolio Allocation */}
+      {!isLoading && ov?.allocation && Object.keys(ov.allocation).length > 0 && (
+        <>
+          <div className="sectionTitle">Portfolio Allocation</div>
+          <div className="grid panels" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            <div className="card panel">
+              <div className="panelTitle">Asset Breakdown</div>
+              <div style={{ position: 'relative', height: 260 }}>
+                <Doughnut
+                  data={{
+                    labels: Object.keys(ov.allocation),
+                    datasets: [{
+                      data: Object.values(ov.allocation),
+                      backgroundColor: ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4'],
+                      borderColor: cssVar('--panel', '#0a1020'),
+                      borderWidth: 2,
+                    }],
+                  }}
+                  options={{
+                    responsive: true, maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                      legend: { position: 'right', labels: { color: cssVar('--muted2', '#94a3b8'), font: { size: 12 }, padding: 16, usePointStyle: true } },
+                      tooltip: { backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
+                    },
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="card panel">
+              <div className="panelTitle">Allocation Radar</div>
+              <div style={{ height: 260 }}>
+                <Radar 
+                  data={{
+                    labels: Object.keys(ov.allocation),
+                    datasets: [{
+                      label: 'Value',
+                      data: Object.values(ov.allocation),
+                      backgroundColor: 'rgba(56,189,248,0.2)',
+                      borderColor: '#38bdf8',
+                      borderWidth: 2,
+                      pointBackgroundColor: '#38bdf8',
+                    }]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      r: {
+                        angleLines: { color: cssVar('--border', 'rgba(148,163,184,0.1)') },
+                        grid: { color: cssVar('--border', 'rgba(148,163,184,0.1)') },
+                        pointLabels: { color: cssVar('--muted2', '#94a3b8'), font: { size: 11 } },
+                        ticks: { display: false }
+                      }
+                    },
+                    plugins: { legend: { display: false } }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="card panel">
+              <div className="panelTitle">Allocation Details</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                {(() => {
+                  const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
+                  return Object.entries(ov.allocation).map(([label, val], i) => {
+                    const colors = ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4']
+                    const pct = total > 0 ? ((val as number) / total) * 100 : 0
+                    return (
+                      <div key={label}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13, fontWeight: 600 }}>
+                          <span style={{ color: 'var(--text)' }}>{label}</span>
+                          <span style={{ color: colors[i % colors.length] }}>{pct.toFixed(1)}%</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 999, background: 'var(--border)', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, borderRadius: 999, background: colors[i % colors.length], transition: 'width 0.5s ease' }} />
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
     </div>
   )
 }
+

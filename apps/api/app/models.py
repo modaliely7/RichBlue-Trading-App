@@ -270,3 +270,12 @@ class CashTransaction(Base):
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
+class SymbolMapping(Base):
+    __tablename__ = "symbol_mappings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_symbol: Mapped[str] = mapped_column(String(32), index=True, unique=True)
+    provider_symbol: Mapped[str] = mapped_column(String(64), index=True)
+    market: Mapped[str | None] = mapped_column(String(32), index=True, nullable=True)
+
