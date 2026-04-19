@@ -23,11 +23,11 @@ export function SettingsPage() {
   // Account Management State
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState<'real' | 'testing'>('real')
+  const [editType, setEditType] = useState<'Real' | 'Testing'>('Real')
 
   const [isAddingAccount, setIsAddingAccount] = useState(false)
   const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState<'real' | 'testing'>('real')
+  const [newType, setNewType] = useState<'Real' | 'Testing'>('Real')
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'default'
@@ -147,8 +147,8 @@ export function SettingsPage() {
                           onChange={e => setEditType(e.target.value as any)}
                           style={{ padding: 4 }}
                         >
-                          <option value="real">Real</option>
-                          <option value="testing">Testing</option>
+                          <option value="Real">Real</option>
+                          <option value="Testing">Testing</option>
                         </select>
                       ) : (
                         acc.account_type.charAt(0).toUpperCase() + acc.account_type.slice(1)
@@ -229,8 +229,8 @@ export function SettingsPage() {
                       onChange={e => setNewType(e.target.value as any)}
                       style={{ padding: 4 }}
                     >
-                      <option value="real">Real</option>
-                      <option value="testing">Testing</option>
+                      <option value="Real">Real</option>
+                      <option value="Testing">Testing</option>
                     </select>
                   </td>
                   <td>

@@ -64,12 +64,12 @@ export function AiCoachPage() {
 
   const coachVerdict = useMemo(() => {
     if (!summary || summary.length === 0) return null
-    
+
     const worstState = [...summary].sort((a, b) => (a.avg_pnl ?? 0) - (b.avg_pnl ?? 0))[0]
     const bestState = [...summary].sort((a, b) => (b.avg_pnl ?? 0) - (a.avg_pnl ?? 0))[0]
-    
+
     const insights = []
-    
+
     if (worstState && (worstState.avg_pnl ?? 0) < 0) {
       insights.push({
         title: `Stop trading when ${worstState.state}`,
@@ -77,7 +77,7 @@ export function AiCoachPage() {
         severity: 'warning' as const
       })
     }
-    
+
     if (bestState && (bestState.avg_pnl ?? 0) > 0) {
       insights.push({
         title: `Your edge is ${bestState.state}`,
@@ -107,10 +107,10 @@ export function AiCoachPage() {
       </div>
 
       {isLoading && <div className="muted" style={{ textAlign: 'center', padding: '40px 0' }}><div className="spinner" style={{ margin: '0 auto 10px' }} /> Analyzing your performance…</div>}
-      
+
       {!isLoading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          
+
           {/* Top Row: Visualizations */}
           {hasData ? (
             <div className="grid panels" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))' }}>
@@ -118,8 +118,8 @@ export function AiCoachPage() {
                 <div className="panelTitle">Emotional Balance</div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 16 }}>Distribution of logged emotional states</div>
                 <div style={{ height: 300 }}>
-                  <Radar 
-                    data={radarData!} 
+                  <Radar
+                    data={radarData!}
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
@@ -132,7 +132,7 @@ export function AiCoachPage() {
                         }
                       },
                       plugins: { legend: { display: false } }
-                    }} 
+                    }}
                   />
                 </div>
               </div>
@@ -141,8 +141,8 @@ export function AiCoachPage() {
                 <div className="panelTitle">Performance Impact</div>
                 <div className="muted" style={{ fontSize: 12, marginBottom: 16 }}>Average PnL per emotional state</div>
                 <div style={{ height: 300 }}>
-                  <Bar 
-                    data={impactData!} 
+                  <Bar
+                    data={impactData!}
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
@@ -151,7 +151,7 @@ export function AiCoachPage() {
                         x: { grid: { display: false }, ticks: { color: cssVar('--muted', '#64748b') } },
                         y: { grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') }, ticks: { color: cssVar('--muted', '#64748b') } }
                       }
-                    }} 
+                    }}
                   />
                 </div>
               </div>
