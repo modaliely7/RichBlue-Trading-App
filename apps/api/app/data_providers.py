@@ -19,6 +19,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
+import pandas as pd
 
 
 def fetch_price_and_fundamentals_yfinance(symbol: str) -> dict[str, Any]:
@@ -34,6 +35,19 @@ def fetch_price_and_fundamentals_yfinance(symbol: str) -> dict[str, Any]:
         info = tk.get_info() if hasattr(tk, "get_info") else getattr(tk, "info", {}) or {}
     except Exception:
         info = getattr(tk, "info", {}) or {}
+
+    # Egyptian stock fallback (.CA)
+    if not info and not symbol.endswith(".CA"):
+        egypt_symbol = symbol + ".CA"
+        tk_eg = yf.Ticker(egypt_symbol)
+        try:
+            info_eg = tk_eg.get_info() if hasattr(tk_eg, "get_info") else getattr(tk_eg, "info", {}) or {}
+            if info_eg and info_eg.get("regularMarketPrice", 0) > 0:
+                symbol = egypt_symbol
+                tk = tk_eg
+                info = info_eg
+        except Exception:
+            pass
 
     # Basic market fields
     price = float(info.get("regularMarketPrice") or info.get("currentPrice") or 0.0)
@@ -224,6 +238,16 @@ def fetch_price_history_yfinance(symbol: str, period: str = "1y", interval: str 
                 break
         except Exception:
             pass
+            
+    if hist.empty and not symbol.endswith(".CA"):
+        tk_eg = yf.Ticker(symbol + ".CA")
+        for _ in range(3):
+            try:
+                hist = tk_eg.history(period=period, interval=interval, auto_adjust=False)
+                if not hist.empty:
+                    break
+            except Exception:
+                pass
     rows: list[dict] = []
     for idx, row in hist.iterrows():
         rows.append(

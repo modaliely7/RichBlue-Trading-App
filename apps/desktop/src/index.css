@@ -34,6 +34,46 @@
   -webkit-font-smoothing: antialiased;
 }
 
+:root[data-theme="medgpt"] {
+  --bg: #FFF200;
+  --bg2: #FFFFFF;
+  --panel: #FFFFFF;
+  --panel2: #FFF200;
+  --panel-hover: #F0E600;
+  --text: #000000;
+  --muted: #333333;
+  --muted2: #111111;
+  --border: #000000;
+  --border-strong: #000000;
+  --accent: #00F0FF;
+  --accent-dim: rgba(0, 240, 255, 0.15);
+  --accent-glow: rgba(0, 240, 255, 0.4);
+  --accent2: #00FF00;
+  --accent2-glow: rgba(0, 255, 0, 0.4);
+  --danger: #FF00FF;
+  --danger-glow: rgba(255, 0, 255, 0.4);
+  --warn: #FFF200;
+  --purple: #FF00FF;
+  --shadow-sm: 4px 4px 0px #000000;
+  --shadow: 6px 6px 0px #000000;
+  --shadow-lg: 8px 8px 0px #000000;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-lg: 0px;
+  color-scheme: light;
+}
+
+html[data-theme="medgpt"] {
+  background: var(--bg);
+}
+
+html[data-theme="medgpt"] .sidebar, 
+html[data-theme="medgpt"] .card, 
+html[data-theme="medgpt"] .heroCard {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 html {
   background:
     radial-gradient(ellipse 900px 600px at 5% 0%, rgba(14,165,233,0.12), transparent),
