@@ -1697,54 +1697,11 @@ def psychology_summary(account_id: int = 1) -> list[PsychologySummaryRow]:
         return rows
 
 
-# Optional background scheduler to refresh fundamentals periodically (requires apscheduler)
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-except Exception:
-    BackgroundScheduler = None
-
-
 @app.on_event("startup")
 def startup_event():
     # Ensure all tables exist (idempotent — safe to run every startup)
     from .db import engine as _engine
     Base.metadata.create_all(bind=_engine)
-
-    if BackgroundScheduler is None:
-        return
-    try:
-        scheduler = BackgroundScheduler()
-
-        def refresh_all_job():
-            with session_scope() as s:
-                try:
-                    syms = set()
-                    syms.update([x for x in s.execute(select(StockMetrics.symbol)).scalars().all() if x])
-                    syms.update([x for x in s.execute(select(Asset.symbol)).scalars().all() if x])
-                    syms.update([x for x in s.execute(select(Trade.symbol)).scalars().all() if x])
-                    for sym in syms:
-                        try:
-                            _refresh_fundamentals(s, sym)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-        scheduler.add_job(refresh_all_job, "interval", hours=24, id="fund_refresh_all", next_run_time=datetime.utcnow() + timedelta(seconds=30))
-        scheduler.start()
-        app.state.scheduler = scheduler
-    except Exception:
-        pass
-
-
-@app.on_event("shutdown")
-def stop_background_scheduler():
-    sched = getattr(app.state, "scheduler", None)
-    if sched:
-        try:
-            sched.shutdown(wait=False)
-        except Exception:
-            pass
 
 
 @app.get("/insights")

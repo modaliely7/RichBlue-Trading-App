@@ -69,6 +69,8 @@ export function SettingsPage() {
         qc.invalidateQueries({ queryKey: ['insights', currentAccount?.id] }),
         qc.invalidateQueries({ queryKey: ['trades', currentAccount?.id] }),
         qc.invalidateQueries({ queryKey: ['performanceAnalytics', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
       ])
       setError('')
       setMessage('Dataset cleared successfully.')
@@ -91,6 +93,8 @@ export function SettingsPage() {
         qc.invalidateQueries({ queryKey: ['insights', currentAccount?.id] }),
         qc.invalidateQueries({ queryKey: ['trades', currentAccount?.id] }),
         qc.invalidateQueries({ queryKey: ['performanceAnalytics', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
       ])
       setError('')
       setMessage(`Restore successful. ${res.trades} trades imported.`)

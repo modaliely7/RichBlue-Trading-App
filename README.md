@@ -97,6 +97,7 @@ Keep your capital safe with built-in risk tools.
    python -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
+   alembic upgrade head
    cd ../..
    ```
 
@@ -106,6 +107,7 @@ Keep your capital safe with built-in risk tools.
    python -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
+   alembic upgrade head
    cd ../..
    ```
 
