@@ -12,7 +12,7 @@ export type Account = {
   created_at: string
 }
 
-export type AccountCreate = Omit<Account, 'id' | 'created_at'>
+export type AccountCreate = { name: string }
 
 export type PsychologyEntry = {
   id: number
@@ -330,7 +330,7 @@ export const api = {
   deletePsychology: (id: number) => apiFetch<{ deleted: true }>(`/psychology/${id}`, { method: 'DELETE' }),
   psychologySummary: (accountId: number = 1) => apiFetch<PsychologySummaryRow[]>(`/psychology/summary?account_id=${accountId}`),
 
-  insights: () => apiFetch<InsightsResponse>('/insights'),
+  insights: (accountId: number = 1) => apiFetch<InsightsResponse>(`/insights?account_id=${accountId}`),
   performanceAnalytics: (params: { start?: string; end?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
     if (params.start) q.set('start', params.start)
@@ -340,8 +340,8 @@ export const api = {
     return apiFetch<PerformanceAnalyticsResponse>(`/performance/analytics${suffix}`)
   },
 
-  listAssets: () => apiFetch<Asset[]>('/assets'),
-  createAsset: (payload: AssetCreate) => apiFetch<Asset>('/assets', { method: 'POST', body: JSON.stringify(payload) }),
+  listAssets: (accountId: number = 1) => apiFetch<Asset[]>(`/assets?account_id=${accountId}`),
+  createAsset: (payload: AssetCreate, accountId: number = 1) => apiFetch<Asset>(`/assets?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
   updateAsset: (id: number, payload: AssetUpdate) =>
     apiFetch<Asset>(`/assets/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteAsset: (id: number) => apiFetch<{ deleted: true }>(`/assets/${id}`, { method: 'DELETE' }),
@@ -351,10 +351,11 @@ export const api = {
   quantIndicators: (file: File, query: Record<string, string | number> = {}) =>
     uploadFileWithQuery<QuantIndicatorsResponse>('/quant/indicators', file, query),
 
-  listLessons: (params: { q?: string; category?: string } = {}) => {
+  listLessons: (params: { q?: string; category?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
     if (params.q) q.set('q', params.q)
     if (params.category) q.set('category', params.category)
+    if (params.account_id) q.set('account_id', String(params.account_id))
     const suffix = q.toString() ? `?${q.toString()}` : ''
     return apiFetch<Lesson[]>(`/lessons${suffix}`)
   },

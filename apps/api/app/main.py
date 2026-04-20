@@ -172,14 +172,11 @@ def list_accounts():
         # Ensure at least one account exists
         accs = s.execute(select(Account).where(Account.is_active == True)).scalars().all()
         if not accs:
-            default = Account(name="Real Account", account_type=AccountType.real, is_active=True)
+            default = Account(name="Main", account_type=AccountType.real, is_active=True)
             s.add(default)
-            s.flush()
-            testing = Account(name="Testing Account", account_type=AccountType.testing, is_active=True)
-            s.add(testing)
             s.commit()
-            accs = [default, testing]
-        
+            accs = [default]
+
         # Expunge all to avoid detached errors
         for a in accs:
             s.expunge(a)
@@ -189,7 +186,10 @@ def list_accounts():
 @app.post("/accounts", response_model=AccountRead)
 def create_account(req: AccountCreate):
     with session_scope() as s:
-        acc = Account(name=req.name, account_type=req.account_type)
+        active_count = s.execute(select(func.count()).where(Account.is_active == True)).scalar_one()
+        if active_count >= 3:
+            raise HTTPException(status_code=400, detail="Maximum of 3 accounts allowed.")
+        acc = Account(name=req.name, account_type=AccountType.real)
         s.add(acc)
         s.commit()
         s.refresh(acc)
@@ -231,6 +231,10 @@ def delete_account(account_id: int):
         acc = s.get(Account, account_id)
         if not acc or not acc.is_active:
             raise HTTPException(status_code=404, detail="Account not found")
+        # Protect the main account (the one with the lowest ID among active accounts)
+        min_id = s.execute(select(func.min(Account.id)).where(Account.is_active == True)).scalar_one()
+        if account_id == min_id:
+            raise HTTPException(status_code=400, detail="Cannot delete the main account.")
         # Soft delete
         acc.is_active = False
         s.commit()
@@ -682,6 +686,28 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             equity_value_series = [portfolio_value_now]
 
         # Construct response
+        # Build per-symbol fund allocation instead of a single "Funds" bucket
+        fund_allocation: dict[str, float] = {}
+        # From Assets table (ETFs)
+        for a in funds_assets:
+            sym = (a.symbol or "FUND").upper()
+            cost = float(a.quantity or 0.0) * float(a.avg_cost or 0.0)
+            fund_allocation[sym] = fund_allocation.get(sym, 0.0) + cost
+        # From Trades (funds market, not already in assets)
+        for t in trades:
+            if t.market != Market.funds:
+                continue
+            if not trade_open_on_day(t, end_day):
+                continue
+            sym = (t.symbol or "FUND").upper()
+            if sym in {a.symbol.upper() for a in funds_assets}:
+                continue  # already counted via assets table
+            cost = float((t.entry_price or 0.0) * (t.position_size or 0.0)) + float(t.fees or 0.0)
+            fund_allocation[sym] = fund_allocation.get(sym, 0.0) + cost
+
+        allocation_dict: dict[str, float] = {"Cash": cash_now, "Stocks": stocks_cost}
+        allocation_dict.update(fund_allocation)
+
         res = OverviewResponse(
             kpis={
                 "as_of": datetime.now(UTC),
@@ -695,11 +721,7 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                 "open_positions": open_positions,
                 "open_symbols": open_symbols,
             },
-            allocation={
-                "Cash": cash_now,
-                "Stocks": stocks_cost,
-                "Funds": funds_cost,
-            },
+            allocation=allocation_dict,
             holdings=holdings,
             trades=[_to_trade_read(t) for t in trades],
             chart={
@@ -932,106 +954,60 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         t = s.get(Trade, trade_id)
         if not t:
             raise HTTPException(status_code=404, detail="Trade not found")
-        before_entry_price = float(t.entry_price or 0.0)
-        before_size = float(t.position_size or 0.0)
-        before_fees = float(t.fees or 0.0)
-        before_exit_fees = float(t.exit_fees or 0.0)
-        before_exit_price = t.exit_price
-        before_exit_date = t.exit_date
+
+        # Apply field updates
         data = payload.model_dump(exclude_unset=True)
         for k, v in data.items():
             setattr(t, k, v)
 
-        # If entry/size/fees changed, adjust cash to keep ledger consistent.
-        after_entry_price = float(t.entry_price or 0.0)
-        after_size = float(t.position_size or 0.0)
-        after_fees = float(t.fees or 0.0)
-        after_exit_fees = float(t.exit_fees or 0.0)
+        # Delete ALL cash transactions linked to this trade and recreate from scratch.
+        # This is the cleanest approach — avoids any delta drift in the liquidation curve.
+        s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
+        s.flush()
 
-        before_required = before_entry_price * before_size + before_fees
-        after_required = after_entry_price * after_size + after_fees
-        delta_required = after_required - before_required
-        if delta_required > 0 and _cash_balance(s, t.account_id) < delta_required:
-            raise HTTPException(status_code=400, detail=f"Insufficient cash to increase position. Need extra {delta_required:.2f}.")
+        account_id = t.account_id
 
-        if abs(delta_required) > 1e-9:
-            # Positive delta_required means more cash needed -> record additional outflow (negative amount)
+        # Entry buy + entry fees
+        if t.position_size and t.entry_price:
             _add_cash_tx(
                 s,
-                account_id=t.account_id,
-                amount=-float(delta_required),
-                tx_type=CashTxType.adjustment,
+                account_id=account_id,
+                amount=-(float(t.entry_price) * float(t.position_size)),
+                tx_type=CashTxType.trade_buy,
                 at=t.entry_date,
-                note="Trade edited (entry/size/fees adjustment)",
+                note="Trade entry (buy)",
+                trade=t,
+            )
+        if t.fees and float(t.fees) != 0.0:
+            _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=-float(t.fees),
+                tx_type=CashTxType.fee,
+                at=t.entry_date,
+                note="Trade fees",
                 trade=t,
             )
 
-        # Keep sell-side cash consistent when close state/size/exit changes.
-        became_closed = before_exit_price is None and t.exit_price is not None
-        became_open = before_exit_price is not None and t.exit_price is None
-        if became_closed:
+        # Exit sell + exit fees (only if closed)
+        if t.exit_price is not None:
             _add_cash_tx(
                 s,
-                account_id=t.account_id,
-                amount=float(t.exit_price or 0.0) * float(t.position_size or 0.0),
+                account_id=account_id,
+                amount=float(t.exit_price) * float(t.position_size or 0.0),
                 tx_type=CashTxType.trade_sell,
                 at=t.exit_date or datetime.now(UTC),
                 note="Trade exit (sell)",
                 trade=t,
             )
-            if after_exit_fees > 0.0:
+            if t.exit_fees and float(t.exit_fees) > 0.0:
                 _add_cash_tx(
                     s,
-                    amount=-after_exit_fees,
+                    account_id=account_id,
+                    amount=-float(t.exit_fees),
                     tx_type=CashTxType.fee,
                     at=t.exit_date or datetime.now(UTC),
                     note="Trade exit (fees)",
-                    trade=t,
-                )
-        if became_open:
-            _add_cash_tx(
-                s,
-                amount=-(float(before_exit_price or 0.0) * float(before_size or 0.0)),
-                tx_type=CashTxType.adjustment,
-                at=before_exit_date or datetime.now(UTC),
-                note="Trade re-opened (reverse sell cash)",
-                trade=t,
-            )
-            if before_exit_fees > 0.0:
-                _add_cash_tx(
-                    s,
-                    amount=before_exit_fees,
-                    tx_type=CashTxType.adjustment,
-                    at=before_exit_date or datetime.now(UTC),
-                    note="Trade re-opened (reverse exit fees)",
-                    trade=t,
-                )
-            t.exit_fees = 0.0
-        elif (before_exit_price is not None and t.exit_price is not None) and (
-            abs(float(before_exit_price) - float(t.exit_price or 0.0)) > 1e-9 or abs(before_size - after_size) > 1e-9
-        ):
-            old_sell = float(before_exit_price or 0.0) * float(before_size or 0.0)
-            new_sell = float(t.exit_price or 0.0) * float(after_size or 0.0)
-            delta_sell = new_sell - old_sell
-            if abs(delta_sell) > 1e-9:
-                _add_cash_tx(
-                    s,
-                    amount=delta_sell,
-                    tx_type=CashTxType.adjustment,
-                    at=t.exit_date or before_exit_date or datetime.utcnow(),
-                    note="Trade edited (exit/size sell adjustment)",
-                    trade=t,
-                )
-
-        if (not became_closed and not became_open) and before_exit_price is not None and t.exit_price is not None:
-            d_exit_fee = after_exit_fees - before_exit_fees
-            if abs(d_exit_fee) > 1e-9:
-                _add_cash_tx(
-                    s,
-                    amount=-d_exit_fee,
-                    tx_type=CashTxType.fee,
-                    at=t.exit_date or before_exit_date or datetime.utcnow(),
-                    note="Trade edited (exit fees adjustment)",
                     trade=t,
                 )
 
@@ -1625,10 +1601,15 @@ def _to_psy_read(p: PsychologyEntry) -> PsychologyRead:
 
 
 @app.get("/psychology", response_model=list[PsychologyRead])
-def list_psychology(limit: int = 200, offset: int = 0) -> list[PsychologyRead]:
+def list_psychology(account_id: int = 1, limit: int = 200, offset: int = 0) -> list[PsychologyRead]:
     with session_scope() as s:
         rows = (
-            s.execute(select(PsychologyEntry).order_by(PsychologyEntry.at.desc()).limit(limit).offset(offset))
+            s.execute(
+                select(PsychologyEntry)
+                .where(PsychologyEntry.account_id == account_id)
+                .order_by(PsychologyEntry.at.desc())
+                .limit(limit).offset(offset)
+            )
             .scalars()
             .all()
         )
@@ -1677,9 +1658,9 @@ def delete_psychology(entry_id: int) -> dict:
 
 
 @app.get("/psychology/summary", response_model=list[PsychologySummaryRow])
-def psychology_summary() -> list[PsychologySummaryRow]:
+def psychology_summary(account_id: int = 1) -> list[PsychologySummaryRow]:
     with session_scope() as s:
-        entries = s.execute(select(PsychologyEntry)).scalars().all()
+        entries = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id)).scalars().all()
         if not entries:
             return []
 
@@ -1767,13 +1748,13 @@ def stop_background_scheduler():
 
 
 @app.get("/insights")
-def insights() -> dict:
+def insights(account_id: int = 1) -> dict:
     """
     Lightweight, deterministic "AI coach" insights based on your data.
     Returns: list of insight cards + supporting aggregates.
     """
     with session_scope() as s:
-        trades = s.execute(select(Trade)).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
         closed = [t for t in trades if t.exit_price is not None and calc_pnl(t) is not None]
 
         def pct(n: float) -> float:
@@ -1886,12 +1867,12 @@ def insights() -> dict:
             )
 
         # Psychology (top state by avg pnl)
-        entries = s.execute(select(PsychologyEntry)).scalars().all()
+        entries = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id)).scalars().all()
         if entries:
             trade_ids = {e.trade_id for e in entries if e.trade_id is not None}
             trades_by_id = {}
             if trade_ids:
-                trows = s.execute(select(Trade).where(Trade.id.in_(trade_ids))).scalars().all()
+                trows = s.execute(select(Trade).where(Trade.id.in_(trade_ids), Trade.account_id == account_id)).scalars().all()
                 trades_by_id = {t.id: t for t in trows}
             best_state = None
             best_avg = None
@@ -1947,10 +1928,16 @@ def _to_lesson_read(x: Lesson) -> LessonRead:
 
 
 @app.get("/lessons", response_model=list[LessonRead])
-def list_lessons(limit: int = 200, offset: int = 0, q: str | None = None, category: LessonCategory | None = None) -> list[LessonRead]:
+def list_lessons(account_id: int = 1, limit: int = 200, offset: int = 0, q: str | None = None, category: LessonCategory | None = None) -> list[LessonRead]:
     with session_scope() as s:
-        stmt = select(Lesson).order_by(Lesson.updated_at.desc()).limit(limit).offset(offset)
-        # lightweight filters in python for SQLite simplicity
+        # Scope lessons by account via their linked trade's account_id
+        stmt = (
+            select(Lesson)
+            .outerjoin(Trade, Lesson.trade_id == Trade.id)
+            .where((Trade.account_id == account_id) | (Lesson.trade_id == None))
+            .order_by(Lesson.updated_at.desc())
+            .limit(limit).offset(offset)
+        )
         rows = s.execute(stmt).scalars().all()
         if category is not None:
             rows = [x for x in rows if x.category == category]
@@ -2122,16 +2109,22 @@ def _to_asset_read(a: Asset) -> AssetRead:
 
 
 @app.get("/assets", response_model=list[AssetRead])
-def list_assets(limit: int = 500, offset: int = 0) -> list[AssetRead]:
+def list_assets(account_id: int = 1, limit: int = 500, offset: int = 0) -> list[AssetRead]:
     with session_scope() as s:
-        rows = s.execute(select(Asset).order_by(Asset.updated_at.desc()).limit(limit).offset(offset)).scalars().all()
+        rows = s.execute(
+            select(Asset)
+            .where(Asset.account_id == account_id)
+            .order_by(Asset.updated_at.desc())
+            .limit(limit).offset(offset)
+        ).scalars().all()
         return [_to_asset_read(a) for a in rows]
 
 
 @app.post("/assets", response_model=AssetRead)
-def create_asset(payload: AssetCreate) -> AssetRead:
+def create_asset(payload: AssetCreate, account_id: int = 1) -> AssetRead:
     with session_scope() as s:
         a = Asset(**payload.model_dump())
+        a.account_id = account_id
         s.add(a)
         s.flush()
         s.refresh(a)

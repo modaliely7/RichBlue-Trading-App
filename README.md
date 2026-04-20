@@ -90,10 +90,21 @@ Keep your capital safe with built-in risk tools.
    ```
 
 3. **Install Backend Dependencies**:
+
+   **On Windows**:
    ```bash
    cd apps/api
    python -m venv .venv
-   source .venv/bin/activate  # Or `.venv\Scripts\activate` on Windows
+   .venv\Scripts\activate
+   pip install -r requirements.txt
+   cd ../..
+   ```
+
+   **On macOS/Linux**:
+   ```bash
+   cd apps/api
+   python -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    cd ../..
    ```
