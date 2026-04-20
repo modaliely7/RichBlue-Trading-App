@@ -20,8 +20,8 @@ function cssVar(name: string, fallback: string): string {
 export function AiCoachPage() {
   const { currentAccount } = useAccount()
   const { data: insightsData, isLoading: insightsLoading, error: insightsError, refetch: refetchInsights, isFetching: isFetchingInsights } = useQuery({
-    queryKey: ['insights'],
-    queryFn: api.insights,
+    queryKey: ['insights', currentAccount?.id],
+    queryFn: () => api.insights(currentAccount?.id ?? 1),
   })
 
   const { data: summary, isLoading: summaryLoading } = useQuery({

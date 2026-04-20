@@ -56,7 +56,7 @@ export function PortfolioPage() {
 
   const portfolioPie = useMemo(() => {
     const cashVal = metrics.cash
-    const fundsVal = Number(ov?.allocation?.Funds ?? 0)
+    const alloc = ov?.allocation ?? {}
     const labels: string[] = []
     const values: number[] = []
     if (cashVal > 1e-9) {
@@ -70,15 +70,21 @@ export function PortfolioPage() {
         values.push(v)
       }
     }
-    if (fundsVal > 1e-9) {
-      labels.push('Funds')
-      values.push(fundsVal)
+    // Add individual fund symbols from allocation dict (skip Cash and Stocks which are covered above)
+    const stockSymbols = new Set(openHoldings.map(h => h.symbol))
+    for (const [sym, val] of Object.entries(alloc)) {
+      if (sym === 'Cash' || sym === 'Stocks') continue
+      if (stockSymbols.has(sym)) continue // already in holdings
+      if (Number(val) > 1e-9) {
+        labels.push(sym)
+        values.push(Number(val))
+      }
     }
     const total = values.reduce((a, b) => a + b, 0)
     const pct = total > 0 ? values.map((v) => (v / total) * 100) : []
     const { bg, border } = pieSliceColors(labels.length)
     return { labels, values, pct, total, bg, border }
-  }, [metrics.cash, ov?.allocation?.Funds, openHoldings, method])
+  }, [metrics.cash, ov?.allocation, openHoldings, method])
 
   return (
     <div className="page">

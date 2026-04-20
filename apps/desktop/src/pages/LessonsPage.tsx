@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import type { LessonCategory, LessonCreate } from '../lib/api'
+import { useAccount } from '../components/AccountContext'
 
 const CATEGORIES: LessonCategory[] = ['Lesson', 'Mistake', 'Psychological note', 'Strategy insight']
 
@@ -10,13 +11,14 @@ function nowIso() {
 }
 
 export function LessonsPage() {
+  const { currentAccount } = useAccount()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState<LessonCategory | ''>('')
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['lessons', q, category],
-    queryFn: () => api.listLessons({ q: q.trim() || undefined, category: category || undefined }),
+    queryKey: ['lessons', currentAccount?.id, q, category],
+    queryFn: () => api.listLessons({ q: q.trim() || undefined, category: category || undefined, account_id: currentAccount?.id ?? 1 }),
   })
 
   const [title, setTitle] = useState('Post-trade review')
