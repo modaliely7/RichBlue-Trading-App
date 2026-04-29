@@ -4,16 +4,21 @@ import { api } from '../lib/api'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { formatCurrency } from '../lib/format'
 
+import { useAccount } from '../components/AccountContext'
+
 export function CashPage() {
   const qc = useQueryClient()
+  const { currentAccount } = useAccount()
+  const accountId = currentAccount?.id || 1
+
   const { data: balanceRes, isLoading: balanceLoading } = useQuery({
-    queryKey: ['cashBalance'],
-    queryFn: () => api.cashBalance()
+    queryKey: ['cashBalance', accountId],
+    queryFn: () => api.cashBalance(accountId)
   })
 
   const { data: txs, isLoading: txsLoading } = useQuery({
-    queryKey: ['cashTransactions'],
-    queryFn: () => api.cashTransactions()
+    queryKey: ['cashTransactions', accountId],
+    queryFn: () => api.cashTransactions(accountId)
   })
 
   const [depositAmount, setDepositAmount] = useState('')
@@ -29,36 +34,36 @@ export function CashPage() {
   const [editNote, setEditNote] = useState('')
 
   const depositMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashDeposit(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashDeposit(payload, accountId),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
+        qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
       setDepositAmount('')
     }
   })
 
   const withdrawMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashWithdraw(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashWithdraw(payload, accountId),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
+        qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
       setWithdrawAmount('')
     }
   })
 
   const adjustMutation = useMutation({
-    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashAdjust(payload),
+    mutationFn: (payload: { amount: number; at?: string; note?: string }) => api.cashAdjust(payload, accountId),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
+        qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
       setAdjustAmount('')
     }
@@ -68,9 +73,9 @@ export function CashPage() {
     mutationFn: api.deleteCashTransaction,
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
+        qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
     },
     onError: (e) => {
@@ -83,9 +88,9 @@ export function CashPage() {
       api.updateCashTransaction(payload.id, { amount: payload.amount, at: payload.at, note: payload.note }),
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
-        qc.invalidateQueries({ queryKey: ['overview'] })
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
+        qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
       setEditingTxId(null)
     },

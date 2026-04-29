@@ -1173,8 +1173,15 @@ textarea:focus {
 }
 
 /* ─── Responsive ─────────────────────────────────────── */
+.tradeSplit {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+
 @media (max-width: 1200px) {
-  .calendarLayout {
+  .calendarLayout, .tradeSplit {
     grid-template-columns: 1fr;
   }
 }

@@ -132,6 +132,7 @@ export type OverviewChartSeries = {
 export type OverviewResponse = {
   kpis: OverviewKpis
   allocation: Record<string, number>
+  fund_allocation?: Record<string, number>
   holdings: HoldingRow[]
   trades: Trade[]
   chart: OverviewChartSeries
