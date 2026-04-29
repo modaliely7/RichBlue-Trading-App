@@ -719,6 +719,43 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             equity_value_series = [portfolio_value_now]
             total_pnl_series = [total_return_value_now]
 
+        # Compute earnings allocation: realized P/L split by asset class
+        earnings_stocks = 0.0
+        earnings_funds = 0.0
+        for t in trades:
+            if t.exit_price is None:
+                continue
+            pnl_val = calc_pnl(t)
+            if pnl_val is None:
+                continue
+            if t.market == Market.funds:
+                earnings_funds += float(pnl_val)
+            else:
+                earnings_stocks += float(pnl_val)
+
+        # If unrealized should be included (liquidation view), add them too
+        if method == "liquidation":
+            for t in trades:
+                if t.exit_price is not None:
+                    continue
+                sym = (t.symbol or "").strip().upper()
+                px = price_by_symbol.get(sym)
+                if px is None:
+                    continue
+                qty = float(t.position_size or 0.0)
+                cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
+                upnl = float(px * qty) - cost
+                if t.market == Market.funds:
+                    earnings_funds += upnl
+                else:
+                    earnings_stocks += upnl
+
+        earnings_allocation: dict[str, float] = {}
+        if abs(earnings_stocks) > 1e-9:
+            earnings_allocation["Stocks"] = earnings_stocks
+        if abs(earnings_funds) > 1e-9:
+            earnings_allocation["Funds"] = earnings_funds
+
         # Construct response
         allocation_dict: dict[str, float] = {"Cash": cash_now, "Stocks": stocks_cost, "Funds": funds_cost}
 
