@@ -192,11 +192,14 @@ class OverviewChartSeries(BaseModel):
     net_deposited: list[float]
     total_return_value: list[float]
     portfolio_value_liquidation: list[float] | None = None
+    total_pnl: list[float] | None = None
 
 
 class OverviewResponse(BaseModel):
     kpis: OverviewKpis
     allocation: dict[str, float]
+    fund_allocation: dict[str, float] | None = None
+    earnings_allocation: dict[str, float] | None = None
     holdings: list[HoldingRow]
     trades: list[TradeRead]
     chart: OverviewChartSeries

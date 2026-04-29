@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pie } from 'react-chartjs-2'
+import { Pie, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api } from '../lib/api'
 import type { HoldingRow } from '../lib/api'
@@ -22,6 +22,8 @@ function pieSliceColors(n: number): { bg: string[]; border: string[] } {
 export function PortfolioPage() {
   const { currentAccount } = useAccount()
   const [method, setMethod] = useState<string>('realized')
+  const [pnlPeriod, setPnlPeriod] = useState<string>('ALL')
+  
   const { data: ov, isLoading, error } = useQuery({ 
     queryKey: ['overview', currentAccount?.id, method], 
     queryFn: () => api.overview(currentAccount?.id ?? 1, method) 
@@ -56,7 +58,6 @@ export function PortfolioPage() {
 
   const portfolioPie = useMemo(() => {
     const cashVal = metrics.cash
-    const alloc = ov?.allocation ?? {}
     const labels: string[] = []
     const values: number[] = []
     if (cashVal > 1e-9) {
@@ -70,10 +71,10 @@ export function PortfolioPage() {
         values.push(v)
       }
     }
-    // Add individual fund symbols from allocation dict (skip Cash and Stocks which are covered above)
+    // Add individual fund symbols from fund_allocation dict
     const stockSymbols = new Set(openHoldings.map(h => h.symbol))
-    for (const [sym, val] of Object.entries(alloc)) {
-      if (sym === 'Cash' || sym === 'Stocks') continue
+    const fundAlloc = ov?.fund_allocation ?? {}
+    for (const [sym, val] of Object.entries(fundAlloc)) {
       if (stockSymbols.has(sym)) continue // already in holdings
       if (Number(val) > 1e-9) {
         labels.push(sym)
@@ -84,7 +85,29 @@ export function PortfolioPage() {
     const pct = total > 0 ? values.map((v) => (v / total) * 100) : []
     const { bg, border } = pieSliceColors(labels.length)
     return { labels, values, pct, total, bg, border }
-  }, [metrics.cash, ov?.allocation, openHoldings, method])
+  }, [metrics.cash, openHoldings, method, ov?.fund_allocation])
+
+  const earningsChart = useMemo(() => {
+    if (!ov?.chart) return null
+    const labels = ov.chart.labels
+    // total_pnl includes unrealized, total_return_value is realized only
+    const values = (method === 'liquidation' && ov.chart.total_pnl) ? ov.chart.total_pnl : ov.chart.total_return_value
+    
+    if (pnlPeriod === 'ALL' || !labels.length) return { labels, values }
+    
+    const now = new Date()
+    let start = new Date()
+    if (pnlPeriod === '1M') start.setMonth(now.getMonth() - 1)
+    else if (pnlPeriod === '6M') start.setMonth(now.getMonth() - 6)
+    else if (pnlPeriod === '1Y') start.setFullYear(now.getFullYear() - 1)
+    else if (pnlPeriod === 'YTD') start = new Date(now.getFullYear(), 0, 1)
+    
+    const indices = labels.map((l, i) => (new Date(l) >= start ? i : -1)).filter(i => i !== -1)
+    return {
+      labels: indices.map(i => labels[i]),
+      values: indices.map(i => values[i])
+    }
+  }, [ov?.chart, pnlPeriod, method])
 
   return (
     <div className="page">
@@ -147,61 +170,118 @@ export function PortfolioPage() {
         </div>
       </div>
 
-
-      <div className="card panel" style={{ marginTop: 12 }}>
-        <div className="panelTitle">Portfolio mix (pie)</div>
-            <div className="muted" style={{ marginTop: 6 }}>
-          Ledger view: cash plus each open stock at cost (or market value) plus funds at average cost.
-        </div>
-        {portfolioPie.total <= 0 ? (
-          <div className="muted" style={{ marginTop: 16 }}>
-            No cash or positions yet. Add a deposit on the Dashboard and trades to see the chart.
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 12, marginTop: 12 }}>
+        <div className="card panel">
+          <div className="panelTitle">Portfolio mix (pie)</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+            Current allocation: cash + holdings at cost (or market value).
           </div>
-        ) : (
-          <>
-            <div className="chartWrapper" style={{ maxWidth: 420, margin: '12px auto 0' }}>
-              <Pie
-                data={{
-                  labels: portfolioPie.labels,
-                  datasets: [
-                    {
+          {portfolioPie.total <= 0 ? (
+            <div className="muted" style={{ marginTop: 16 }}>No cash or positions yet.</div>
+          ) : (
+            <>
+              <div className="chartWrapper" style={{ maxWidth: 380, margin: '16px auto 0', height: 280 }}>
+                <Pie
+                  data={{
+                    labels: portfolioPie.labels,
+                    datasets: [{
                       data: portfolioPie.values,
                       backgroundColor: portfolioPie.bg,
                       borderColor: portfolioPie.border,
                       borderWidth: 1,
+                    }],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'right', labels: { color: 'rgba(148,163,184,0.95)', boxWidth: 12 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (ctx) => {
+                            const v = Number(ctx.raw ?? 0)
+                            const idx = ctx.dataIndex
+                            return `${ctx.label}: ${formatCurrency(v)} (${formatPct(portfolioPie.pct[idx] ?? 0)})`
+                          },
+                        },
+                      },
                     },
-                  ],
+                  }}
+                />
+              </div>
+              <div className="muted" style={{ marginTop: 10, textAlign: 'center', fontSize: 13 }}>
+                Pie total: <span className="mono">{formatCurrency(portfolioPie.total)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="card panel">
+          <div className="panelHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="panelTitle">Portfolio Earnings</div>
+            <div className="periodSelect">
+              {['1M', '6M', '1Y', 'YTD', 'ALL'].map(p => (
+                <button 
+                  key={p} 
+                  className={`btn-small ${pnlPeriod === p ? 'active' : ''}`}
+                  onClick={() => setPnlPeriod(p)}
+                  style={{ marginLeft: 4, padding: '2px 8px', fontSize: 11 }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+            Cumulative {method === 'realized' ? 'Realized PnL' : 'Total PnL (inc. unrealized)'} over time.
+          </div>
+          {!earningsChart || !earningsChart.labels.length ? (
+            <div className="muted" style={{ marginTop: 16 }}>No earnings data for this period.</div>
+          ) : (
+            <div className="chartWrapper" style={{ marginTop: 16, height: 280 }}>
+              <Line
+                data={{
+                  labels: earningsChart.labels,
+                  datasets: [{
+                    label: 'Earnings',
+                    data: earningsChart.values,
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                  }],
                 }}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
+                  scales: {
+                    x: { display: false },
+                    y: { 
+                      grid: { color: 'rgba(255,255,255,0.05)' },
+                      ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }
+                    }
+                  },
                   plugins: {
-                    legend: { position: 'right', labels: { color: 'rgba(148,163,184,0.95)', boxWidth: 12 } },
+                    legend: { display: false },
                     tooltip: {
                       callbacks: {
-                        label: (ctx) => {
-                          const v = Number(ctx.raw ?? 0)
-                          const idx = ctx.dataIndex
-                          return `${ctx.label}: ${formatCurrency(v)} (${formatPct(portfolioPie.pct[idx] ?? 0)})`
-                        },
-                      },
-                    },
-                  },
+                        label: (ctx) => `${formatCurrency(Number(ctx.raw ?? 0))}`
+                      }
+                    }
+                  }
                 }}
               />
             </div>
-            <div className="muted" style={{ marginTop: 10, textAlign: 'center' }}>
-              Pie total (cash + holdings at cost): <span className="mono">{formatCurrency(portfolioPie.total)}</span>
-            </div>
-            {metrics.mismatch && method === 'realized' ? (
-              <div className="error" style={{ marginTop: 10, fontSize: 13, textAlign: 'center' }}>
-                Pie total {formatCurrency(metrics.realizedFromLedger)} ≠ realized portfolio value {formatCurrency(metrics.realizedFromPnL)}. Check fund positions
-                outside trades or cash adjustments.
-              </div>
-            ) : null}
-          </>
-        )}
+          )}
+        </div>
       </div>
+
+      {metrics.mismatch && method === 'realized' ? (
+        <div className="error" style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+          Pie total {formatCurrency(metrics.realizedFromLedger)} ≠ realized portfolio value {formatCurrency(metrics.realizedFromPnL)}. Check fund positions.
+        </div>
+      ) : null}
 
       <div className="card panel" style={{ marginTop: 12 }}>
         <div className="panelTitle">Positions by symbol</div>
@@ -216,8 +296,6 @@ export function PortfolioPage() {
                 <th>Open Qty</th>
                 <th>Avg open cost (reference price)</th>
                 <th>Open cost basis</th>
-                <th>Realized</th>
-                <th>Trades</th>
               </tr>
             </thead>
             <tbody>
@@ -227,15 +305,11 @@ export function PortfolioPage() {
                   <td className="mono">{h.open_quantity}</td>
                   <td className="mono">{h.avg_open_cost == null ? '—' : h.avg_open_cost.toFixed(4)}</td>
                   <td className="mono">{formatCurrency(h.open_cost_basis)}</td>
-                  <td className={h.realized_pnl >= 0 ? 'good' : 'bad'}>{formatCurrency(h.realized_pnl)}</td>
-                  <td className="mono">
-                    {h.open_trades} open / {h.closed_trades} closed
-                  </td>
                 </tr>
               ))}
               {openHoldings.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="muted">
+                  <td colSpan={4} className="muted">
                     No open positions yet. Add trades on the Trades tab.
                   </td>
                 </tr>

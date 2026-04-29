@@ -3,9 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
+import { useAccount } from '../components/AccountContext'
 
 export function SymbolsPage() {
-  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ queryKey: ['overview'], queryFn: () => api.overview() })
+  const { currentAccount } = useAccount()
+  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ 
+    queryKey: ['overview', currentAccount?.id], 
+    queryFn: () => api.overview(currentAccount?.id ?? 1) 
+  })
   const [selectedSymbol, setSelectedSymbol] = useState<string>('')
 
   const symbols = useMemo(() => {

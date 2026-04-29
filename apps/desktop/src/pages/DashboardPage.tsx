@@ -123,7 +123,9 @@ export function DashboardPage() {
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
       monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + (t.pnl ?? 0))
     }
-    const monthlyLabels = Array.from(monthlyMap.keys()).sort()
+    const monthlyLabelsAll = Array.from(monthlyMap.keys()).sort()
+    // limit to last 6 months maximum
+    const monthlyLabels = monthlyLabelsAll.slice(-6)
     const monthlyValues = monthlyLabels.map(k => monthlyMap.get(k) ?? 0)
 
     return { total, totalTrades: trades.length, closedTrades: closed.length, winRate, profitFactor, avgWin, avgLoss, monthlyLabels, monthlyValues, sharpe, maxDd }
@@ -309,7 +311,6 @@ export function DashboardPage() {
                 labels: chartFiltered.labels,
                 datasets: [
                   { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
-                  { label: 'Equity (Liquidation)', data: chartFiltered.portfolio_value_liquidation, borderColor: 'rgba(56,189,248,0.5)', borderDash: [4, 4], fill: false, pointRadius: 0, tension: 0.2 },
                   { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
                   { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
                 ],
@@ -401,8 +402,11 @@ export function DashboardPage() {
                   data={{
                     labels: Object.keys(ov.allocation),
                     datasets: [{
-                      label: 'Value',
-                      data: Object.values(ov.allocation),
+                      label: 'Allocation %',
+                      data: (() => {
+                        const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
+                        return Object.values(ov.allocation).map(v => total > 0 ? Number(((v as number) / total * 100).toFixed(1)) : 0)
+                      })(),
                       backgroundColor: 'rgba(56,189,248,0.2)',
                       borderColor: '#38bdf8',
                       borderWidth: 2,

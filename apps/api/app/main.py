@@ -533,9 +533,10 @@ def _funds_cost_from_assets(s, account_id: int = 1) -> float:
 
 
 @app.get("/overview", response_model=OverviewResponse)
+@app.get("/overview", response_model=OverviewResponse)
 def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
     with session_scope() as s:
-        trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.desc())).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.asc())).scalars().all()
         holdings = _compute_holdings(s, account_id)
         txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
         end_day = datetime.now(UTC).date()
@@ -547,6 +548,10 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
         # Deduplication symbols: If a fund is in Assets, we skip it in the Trades loop for the pie chart.
         asset_symbols = {a.symbol.upper() for a in assets_for_prices if a.asset_class == AssetClass.etfs}
 
+        # Build fund_allocation
+        funds_assets = [a for a in assets_for_prices if a.asset_class == AssetClass.etfs]
+        fund_allocation = {a.symbol.upper(): float((a.quantity or 0.0) * (a.avg_cost or 0.0)) for a in funds_assets}
+
         stocks_cost = 0.0
         funds_from_trades_cost = 0.0
         for t in trades:
@@ -557,8 +562,10 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             
             if t.market == Market.funds:
                 # Deduplicate: Only add if NOT already in the Assets table
-                if (t.symbol or "").upper() not in asset_symbols:
+                sym = (t.symbol or "").upper()
+                if sym not in asset_symbols:
                     funds_from_trades_cost += cost
+                    fund_allocation[sym] = fund_allocation.get(sym, 0.0) + cost
             else:
                 # Regular stocks
                 stocks_cost += cost
@@ -568,14 +575,11 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
 
         # Current market values (snapshot) for portfolio/equity computation
         stocks_mv_current = float(sum(float(h.market_value or 0.0) for h in holdings))
-        funds_assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.etfs)).scalars().all()
         funds_mv_current = float(sum(float(a.current_price or 0.0) * float(a.quantity or 0.0) for a in funds_assets))
-        assets_mv_current = float(stocks_mv_current + funds_mv_current)
-
+        
         realized_total = realized_pnl_cumulative_through(trades, end_day)
         unreal_total = unrealized_pnl_cumulative_through(trades, end_day, price_by_symbol)
-        open_positions = int(sum(1 for h in holdings if (h.open_quantity or 0.0) != 0.0))
-        open_symbols = int(sum(1 for h in holdings if (h.open_quantity or 0.0) != 0.0))
+        open_positions_count = int(sum(1 for h in holdings if (h.open_quantity or 0.0) != 0.0))
 
         cash_now = ledger_balance_through(txs, end_day)
         net_deposited_now = net_deposited_through(txs, end_day)
@@ -602,80 +606,109 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             for r in hist_rows:
                 sym = r.symbol.upper()
                 ds = (r.at.date() if hasattr(r.at, "date") else r.at).strftime("%Y-%m-%d")
-                # price_history_cache is already sorted by date due to order_by PriceHistory.at.asc()
                 price_history_cache.setdefault(sym, []).append((ds, float(r.close)))
 
-        # Daily series
+        # Optimized Daily series generation
         labels: list[str] = []
         portfolio_value_series: list[float] = [] # Realized: Net Dep + Realized P/L
         net_dep_series: list[float] = []
         total_return_series: list[float] = [] # Realized P/L
         equity_value_series: list[float] = [] # Liquidation: Cash + Market Value
+        total_pnl_series: list[float] = [] # Realized + Unrealized
 
         start_candidates: list[date] = []
         if txs:
             start_candidates.append(min((tx_at_date(tx.at)) for tx in txs))
         if trades:
-            start_candidates.append(
-                min((tx_at_date(t.entry_date)) for t in trades)
-            )
+            # trades is already sorted by entry_date.asc()
+            start_candidates.append(tx_at_date(trades[0].entry_date))
         
-        end_day = datetime.now(UTC).date()
         if start_candidates:
             start_day = min(start_candidates)
             if start_day > end_day:
                 start_day = end_day
-            cur = start_day
             
-            # Helper to get price for a symbol on/before a day
+            # Organize events by date for iterative processing
+            events_by_date: dict[date, list[tuple[str, any]]] = {}
+            for tx in txs:
+                d = tx_at_date(tx.at)
+                events_by_date.setdefault(d, []).append(("tx", tx))
+            for t in trades:
+                ed = tx_at_date(t.entry_date)
+                events_by_date.setdefault(ed, []).append(("entry", t))
+                if t.exit_date:
+                    xd = tx_at_date(t.exit_date)
+                    events_by_date.setdefault(xd, []).append(("exit", t))
+
             def get_price_on_day(sym: str, d: date) -> float | None:
                 sym = sym.upper()
                 if sym not in price_history_cache:
                     return price_by_symbol.get(sym)
-                
-                prices = price_history_cache[sym] # list of (ds, price)
+                prices = price_history_cache[sym]
                 ds = d.strftime("%Y-%m-%d")
-                
-                # Use bisect to find the rightmost entry <= ds
                 idx = bisect.bisect_right(prices, (ds, float('inf'))) - 1
                 if idx >= 0:
                     return prices[idx][1]
-                
                 return price_by_symbol.get(sym)
 
+            running_cash = 0.0
+            running_net_dep = 0.0
+            running_realized_pnl = 0.0
+            open_pos_tracker: dict[str, dict[str, float]] = {} # sym -> {qty, cost}
+
+            cur = start_day
             while cur <= end_day:
-                # Skip weekends — markets are closed, no new data
-                if cur.weekday() < 5:  # 0=Mon ... 4=Fri
+                if cur in events_by_date:
+                    for etype, ev in events_by_date[cur]:
+                        if etype == "tx":
+                            running_cash += float(ev.amount or 0.0)
+                            if ev.tx_type in {CashTxType.deposit, CashTxType.withdraw}:
+                                running_net_dep += float(ev.amount or 0.0)
+                        elif etype == "entry":
+                            sym = (ev.symbol or "").strip().upper()
+                            qty = float(ev.position_size or 0.0)
+                            cost = float((ev.entry_price or 0.0) * qty) + float(ev.fees or 0.0)
+                            p = open_pos_tracker.setdefault(sym, {"qty": 0.0, "cost": 0.0})
+                            p["qty"] += qty
+                            p["cost"] += cost
+                        elif etype == "exit":
+                            sym = (ev.symbol or "").strip().upper()
+                            qty = float(ev.position_size or 0.0)
+                            pnl = calc_pnl(ev) or 0.0
+                            running_realized_pnl += float(pnl)
+                            if sym in open_pos_tracker:
+                                p = open_pos_tracker[sym]
+                                # Note: This assumes whole position management or that exit matches entry qty
+                                # We'll just subtract what was exited
+                                p["qty"] -= qty
+                                # Cost basis reduction: (entry_price * exited_qty) + entry_fees
+                                entry_cost_exited = float((ev.entry_price or 0.0) * qty) + float(ev.fees or 0.0)
+                                p["cost"] -= entry_cost_exited
+                                if p["qty"] <= 1e-9:
+                                    del open_pos_tracker[sym]
+
+                if cur.weekday() < 5:
                     day_str = cur.strftime("%Y-%m-%d")
-
-                    # 1. Realized metrics
-                    net_dep = net_deposited_through(txs, cur)
-                    real_cum = realized_pnl_cumulative_through(trades, cur)
-                    pv_realized = float(net_dep + real_cum)
-
-                    # 2. Liquidation metrics (Equity)
-                    cash_day = ledger_balance_through(txs, cur)
-
-                    # Market value of open trades using historical price lookup
-                    open_mv = 0.0
-                    for t in trades:
-                        if trade_open_on_day(t, cur):
-                            sym = (t.symbol or "").strip().upper()
-                            px = get_price_on_day(sym, cur)
-                            if px is not None:
-                                open_mv += float(px * (t.position_size or 0.0))
-                            else:
-                                # fallback to entry price if history missing
-                                open_mv += float((t.entry_price or 0.0) * (t.position_size or 0.0))
-
-                    # For funds, we use current mv as a proxy for historical mv if no history available
-                    equity_day = float(cash_day + open_mv + (funds_mv_current or 0.0))
-
+                    
+                    # Calculate daily Market Value and Unrealized PnL
+                    day_open_mv = 0.0
+                    day_open_cost = 0.0
+                    for sym, p in open_pos_tracker.items():
+                        px = get_price_on_day(sym, cur)
+                        if px is not None:
+                            day_open_mv += float(px * p["qty"])
+                        else:
+                            day_open_mv += p["cost"]
+                        day_open_cost += p["cost"]
+                    
+                    day_unrealized = day_open_mv - day_open_cost
+                    
                     labels.append(day_str)
-                    net_dep_series.append(net_dep)
-                    total_return_series.append(real_cum)
-                    portfolio_value_series.append(pv_realized)
-                    equity_value_series.append(equity_day)
+                    net_dep_series.append(running_net_dep)
+                    total_return_series.append(running_realized_pnl)
+                    portfolio_value_series.append(running_net_dep + running_realized_pnl)
+                    equity_value_series.append(running_cash + day_open_mv + (funds_mv_current or 0.0))
+                    total_pnl_series.append(running_realized_pnl + day_unrealized)
 
                 cur += timedelta(days=1)
         else:
@@ -684,29 +717,10 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             net_dep_series = [net_deposited_now]
             total_return_series = [realized_total]
             equity_value_series = [portfolio_value_now]
+            total_pnl_series = [total_return_value_now]
 
         # Construct response
-        # Build per-symbol fund allocation instead of a single "Funds" bucket
-        fund_allocation: dict[str, float] = {}
-        # From Assets table (ETFs)
-        for a in funds_assets:
-            sym = (a.symbol or "FUND").upper()
-            cost = float(a.quantity or 0.0) * float(a.avg_cost or 0.0)
-            fund_allocation[sym] = fund_allocation.get(sym, 0.0) + cost
-        # From Trades (funds market, not already in assets)
-        for t in trades:
-            if t.market != Market.funds:
-                continue
-            if not trade_open_on_day(t, end_day):
-                continue
-            sym = (t.symbol or "FUND").upper()
-            if sym in {a.symbol.upper() for a in funds_assets}:
-                continue  # already counted via assets table
-            cost = float((t.entry_price or 0.0) * (t.position_size or 0.0)) + float(t.fees or 0.0)
-            fund_allocation[sym] = fund_allocation.get(sym, 0.0) + cost
-
-        allocation_dict: dict[str, float] = {"Cash": cash_now, "Stocks": stocks_cost}
-        allocation_dict.update(fund_allocation)
+        allocation_dict: dict[str, float] = {"Cash": cash_now, "Stocks": stocks_cost, "Funds": funds_cost}
 
         res = OverviewResponse(
             kpis={
@@ -718,10 +732,11 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                 "total_return_value": total_return_value_now,
                 "total_return_pct": total_return_pct_now,
                 "realized_pnl_total": realized_total,
-                "open_positions": open_positions,
-                "open_symbols": open_symbols,
+                "open_positions": open_positions_count,
+                "open_symbols": open_positions_count,
             },
             allocation=allocation_dict,
+            fund_allocation=fund_allocation,
             holdings=holdings,
             trades=[_to_trade_read(t) for t in trades],
             chart={
@@ -730,6 +745,7 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                 "net_deposited": net_dep_series,
                 "total_return_value": total_return_series,
                 "portfolio_value_liquidation": equity_value_series,
+                "total_pnl": total_pnl_series,
             },
         )
 

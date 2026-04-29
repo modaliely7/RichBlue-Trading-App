@@ -438,7 +438,7 @@ export function JournalPage() {
         {createMutation.error ? <div className="error">Failed to create trade.</div> : null}
       </div>
 
-      <div className="tradeSplit" style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, alignItems: 'start' }}>
+      <div className="tradeSplit" style={{ marginTop: 16 }}>
         <div className="card panel">
           <div className="panelTitleRow">
             <div className="panelTitle">Trades</div>
