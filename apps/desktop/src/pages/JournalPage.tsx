@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, tradeScreenshotPublicUrl, type OverviewResponse, type Strategy } from '../lib/api'
-import type { Market, Trade, TradeCreate, TradeUpdate, StrategyCreate } from '../lib/api'
+import type { Market, Trade, TradeCreate, TradeUpdate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 
@@ -55,10 +55,10 @@ function evaluateEquation(eq: string): number {
   try {
     // 1. Replace percentages: 0.125% -> (0.125/100)
     let sanitized = eq.replace(/(\d*\.?\d+)%/g, '($1/100)')
-    
+
     // 2. Remove anything that isn't a safe math char
     sanitized = sanitized.replace(/[^0-9.\+\-\*\/\(\)\s]/g, '')
-    
+
     // 3. Eval (simple enough for this use case, and sanitized)
     // eslint-disable-next-line no-eval
     const result = eval(sanitized)
@@ -108,14 +108,14 @@ function tradeToDraft(t: Trade): TradeDraft {
   }
 }
 
-function StrategySelect({ 
-  selectedIds, 
-  onChange, 
+function StrategySelect({
+  selectedIds,
+  onChange,
   allStrategies,
   onCreate
-}: { 
-  selectedIds: number[], 
-  onChange: (ids: number[]) => void, 
+}: {
+  selectedIds: number[],
+  onChange: (ids: number[]) => void,
   allStrategies: Strategy[],
   onCreate: (name: string) => Promise<void>
 }) {
@@ -134,7 +134,7 @@ function StrategySelect({
             <span onClick={(e) => { e.stopPropagation(); onChange(selectedIds.filter(id => id !== s.id)) }} style={{ cursor: 'pointer', opacity: 0.6, fontSize: 14 }}>×</span>
           </span>
         ))}
-        <input 
+        <input
           placeholder={selectedIds.length === 0 ? "Select strategies..." : ""}
           value={query}
           onChange={e => { setQuery(e.target.value); setIsOpen(true) }}
@@ -145,8 +145,8 @@ function StrategySelect({
       {isOpen && (
         <div className="strategyDropdown card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: 'var(--panel)' }}>
           {filtered.map(s => (
-            <div 
-              key={s.id} 
+            <div
+              key={s.id}
               className="strategyOption"
               onClick={() => {
                 if (!selectedIds.includes(s.id)) onChange([...selectedIds, s.id])
@@ -159,7 +159,7 @@ function StrategySelect({
             </div>
           ))}
           {query && !allStrategies.some(s => s.name.toLowerCase() === query.toLowerCase()) && (
-            <div 
+            <div
               className="strategyOption"
               style={{ padding: '10px 12px', cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}
               onClick={async () => {
@@ -177,12 +177,102 @@ function StrategySelect({
   )
 }
 
+function DividendModal({
+  onClose,
+  accountId,
+  trades
+}: {
+  onClose: () => void;
+  accountId: number;
+  trades: Trade[]
+}) {
+  const [tradeId, setTradeId] = useState<number | null>(null)
+  const [amount, setAmount] = useState('')
+  const [isStockDividend, setIsStockDividend] = useState(false)
+  const [note, setNote] = useState('')
+  const [at, setAt] = useState(() => {
+    const dt = new Date()
+    return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  })
+  const qc = useQueryClient()
+
+  const openTrades = trades.filter(t => !t.exit_price)
+
+  const mutation = useMutation({
+    mutationFn: (payload: any) => api.recordDividend({ ...payload, account_id: accountId }),
+    onSuccess: () => {
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['overview', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', accountId] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] })
+      ])
+      onClose()
+    }
+  })
+
+  const selectedTrade = trades.find(t => t.id === tradeId)
+
+  return (
+    <div className="modalOverlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
+      <div className="card panel" onClick={e => e.stopPropagation()} style={{ width: 450, maxWidth: '90%', border: '1px solid var(--accent-dim)' }}>
+        <div className="panelTitle">Record Dividend</div>
+        <div className="muted" style={{ marginBottom: 16, fontSize: 13 }}>Link a dividend payment or stock bonus to an open trade.</div>
+        <div className="formGrid" style={{ marginTop: 12 }}>
+          <label className="span2">
+            <div className="label">Linked Trade (Open Only)</div>
+            <select value={tradeId || ''} onChange={e => setTradeId(Number(e.target.value))}>
+              <option value="">Select a trade...</option>
+              {openTrades.map(t => (
+                <option key={t.id} value={t.id}>{t.symbol} - Entry: {formatCurrency(t.entry_price)} (Size: {t.position_size})</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <div className="label">Type</div>
+            <select value={isStockDividend ? 'stock' : 'cash'} onChange={e => setIsStockDividend(e.target.value === 'stock')}>
+              <option value="cash">Cash Dividend</option>
+              <option value="stock">Stock Dividend (Shares)</option>
+            </select>
+          </label>
+          <label>
+            <div className="label">{isStockDividend ? 'Shares Added' : 'Dividend Amount'}</div>
+            <input type="text" inputMode="decimal" value={amount} onChange={e => setAmount(normalizeDecimalTyping(amount, e.target.value))} placeholder="0.00" />
+          </label>
+          <label className="span2">
+            <div className="label">Date</div>
+            <input type="datetime-local" value={at} onChange={e => setAt(e.target.value)} />
+          </label>
+          <label className="span2">
+            <div className="label">Note</div>
+            <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional description" />
+          </label>
+          <div className="detailsActions span2" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+            <button className="btnGhost" onClick={onClose}>Cancel</button>
+            <button className="btn" disabled={!tradeId || !amount || mutation.isPending} onClick={() => {
+              mutation.mutate({
+                symbol: selectedTrade?.symbol || '',
+                amount: parseDecimal(amount),
+                is_stock_dividend: isStockDividend,
+                trade_id: tradeId,
+                at: new Date(at).toISOString(),
+                note: note
+              })
+            }}>
+              {mutation.isPending ? 'Saving...' : 'Save Dividend'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function JournalPage() {
   const { currentAccount } = useAccount()
   const qc = useQueryClient()
-  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({ 
-    queryKey: ['overview', currentAccount?.id], 
-    queryFn: () => api.overview(currentAccount?.id ?? 1) 
+  const { data: ov, isLoading, error } = useQuery<OverviewResponse>({
+    queryKey: ['overview', currentAccount?.id],
+    queryFn: () => api.overview(currentAccount?.id ?? 1)
   })
   const now = useMemo(() => new Date(), [])
   const defaultEntry = useMemo(() => toDatetimeLocalValue(now.toISOString()), [now])
@@ -192,7 +282,6 @@ export function JournalPage() {
   const [entryPriceStr, setEntryPriceStr] = useState('')
   const [exitPriceStr, setExitPriceStr] = useState('')
   const [sizeStr, setSizeStr] = useState('')
-  const [strategyUsed, setStrategyUsed] = useState<string>('Breakout')
   const [entryDateLocal, setEntryDateLocal] = useState<string>(defaultEntry)
   const [exitDateLocal, setExitDateLocal] = useState<string>('')
   const [feesStr, setFeesStr] = useState('')
@@ -201,6 +290,8 @@ export function JournalPage() {
   const [isAutoFeesEdit, setIsAutoFeesEdit] = useState(true)
   const [notes, setNotes] = useState<string>('')
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<number[]>([])
+  const [detectedName, setDetectedName] = useState('')
+  const [isDetecting, setIsDetecting] = useState(false)
 
   const { data: allStrategies = [], refetch: refetchStrategies } = useQuery({
     queryKey: ['strategies', currentAccount?.id],
@@ -231,7 +322,7 @@ export function JournalPage() {
     const ep = parseDecimal(entryPriceStr)
     const sz = parseDecimal(sizeStr)
     const xp = parseDecimal(exitPriceStr)
-    
+
     if (ep > 0 && sz > 0) {
       setFeesStr(`(${ep} * ${sz} * 0.125 / 100) + 3`)
     } else {
@@ -245,9 +336,40 @@ export function JournalPage() {
     }
   }, [isAutoFees, entryPriceStr, exitPriceStr, sizeStr])
 
+  // Symbol suggestion & asset class detection
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase()
+    if (sym.length < 2) {
+      setDetectedName('')
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setIsDetecting(true)
+      try {
+        const data = await api.fundamentals(sym)
+        if (data && data.company_name) {
+          setDetectedName(data.company_name)
+          const qt = data.quote_type
+          if (qt === 'EQUITY') setMarket('Stocks')
+          else if (qt === 'ETF' || qt === 'MUTUALFUND' || qt === 'INDEX') setMarket('Funds')
+          else if (qt === 'CRYPTOCURRENCY') setMarket('Crypto')
+          else if (qt === 'CURRENCY') setMarket('Forex')
+        }
+      } catch (e) {
+        // quiet failure for auto-detection
+      } finally {
+        setIsDetecting(false)
+      }
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [symbol])
+
   const [tradeSearch, setTradeSearch] = useState<string>('')
   const [tradeStatus, setTradeStatus] = useState<'all' | 'open' | 'closed'>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [isDividendModalOpen, setIsDividendModalOpen] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState<TradeDraft | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -301,10 +423,9 @@ export function JournalPage() {
       setFeesStr('')
       setExitFeesStr('')
       setNotes('')
-      setStrategyUsed('Breakout')
       setExitDateLocal('')
       setEntryDateLocal(defaultEntry)
-      setSelectedStrategyIds([])
+      setDetectedName('')
     },
   })
 
@@ -351,6 +472,12 @@ export function JournalPage() {
     mutationFn: (file: File) => api.importTradesCsv(file, currentAccount?.id ?? 1),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
+      setSymbol('')
+      setEntryPriceStr('')
+      setExitPriceStr('')
+      setSizeStr('')
+      setNotes('')
+      setDetectedName('')
       alert('Import completed')
     },
     onError: (err) => alert(String(err)),
@@ -362,7 +489,7 @@ export function JournalPage() {
   const feesNum = evaluateEquation(feesStr)
   const hasExitOnCreate = exitPriceStr.trim() !== ''
   const requiredCash = entryPx * sizeNum + feesNum
-  const cashOk = !symbol.trim() || requiredCash <= 0 || cashAvailable >= requiredCash - 1e-9
+  const cashOk = !symbol.trim() || hasExitOnCreate || requiredCash <= 0 || cashAvailable >= requiredCash - 1e-9
   const requiredPct = requiredCash > 0 && cashAvailable > 0 ? Math.min(100, (requiredCash / cashAvailable) * 100) : requiredCash > 0 ? 100 : 0
 
   const rows = useMemo(() => {
@@ -424,7 +551,8 @@ export function JournalPage() {
           <div className="pageTitle">Trades</div>
           <div className="pageSubtitle">Add/close/re-open trades. Deposit or withdraw cash on the Dashboard.</div>
         </div>
-        <div className="detailsActions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="detailsActions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end', gap: 12 }}>
+          <button className="btn btnGhost" onClick={() => setIsDividendModalOpen(true)}>Add Dividend</button>
           <OverviewSyncBar />
         </div>
       </div>
@@ -444,6 +572,14 @@ export function JournalPage() {
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               placeholder="Any ticker or symbol (free text)"
             />
+            {detectedName && (
+              <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, fontWeight: 500 }}>
+                {detectedName}
+              </div>
+            )}
+            {isDetecting && (
+              <div style={{ fontSize: 10, color: 'var(--muted2)', marginTop: 4 }}>Detecting...</div>
+            )}
           </label>
           <label>
             <div className="label">Market</div>
@@ -489,10 +625,13 @@ export function JournalPage() {
           </label>
           <label>
             <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Fees (entry)</span>
-              <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setIsAutoFees(!isAutoFees)}>
-                <input type="checkbox" checked={isAutoFees} onChange={() => {}} style={{ width: 12, height: 12 }} /> Auto
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>Entry fees</span>
+                <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: isAutoFees ? 'var(--accent)' : 'var(--muted)' }} onClick={() => setIsAutoFees(!isAutoFees)}>
+                  <input type="checkbox" checked={isAutoFees} onChange={() => { }} style={{ width: 10, height: 10 }} /> Auto
+                </span>
+              </div>
+              {feesNum > 0 && <span className="good" style={{ fontSize: 10 }}>Val: {formatCurrency(feesNum)}</span>}
             </div>
             <input
               type="text"
@@ -507,7 +646,10 @@ export function JournalPage() {
           </label>
           {hasExitOnCreate ? (
             <label>
-              <div className="label">Exit fees</div>
+              <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Exit fees</span>
+                {evaluateEquation(exitFeesStr) > 0 && <span className="good" style={{ fontSize: 10 }}>Val: {formatCurrency(evaluateEquation(exitFeesStr))}</span>}
+              </div>
               <input
                 type="text"
                 autoComplete="off"
@@ -522,9 +664,9 @@ export function JournalPage() {
           ) : null}
           <label className="span2">
             <div className="label">Strategies</div>
-            <StrategySelect 
-              selectedIds={selectedStrategyIds} 
-              allStrategies={allStrategies} 
+            <StrategySelect
+              selectedIds={selectedStrategyIds}
+              allStrategies={allStrategies}
               onChange={setSelectedStrategyIds}
               onCreate={async (name) => { createStrategyMutation.mutate(name) }}
             />
@@ -563,12 +705,12 @@ export function JournalPage() {
                   <span className="mono">{formatCurrency(entryPx * sizeNum)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                  <span className="muted">Fees</span>
-                  <span className="mono">{formatCurrency(feesNum)}</span>
+                  <span className="muted">Total Fees</span>
+                  <span className="mono">{formatCurrency(feesNum + (hasExitOnCreate ? evaluateEquation(exitFeesStr) : 0))}</span>
                 </div>
                 <div style={{ borderTop: '1px solid rgba(148,163,184,0.14)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 650 }}>
                   <span>Total required</span>
-                  <span className="mono">{formatCurrency(requiredCash)}</span>
+                  <span className="mono">{formatCurrency(entryPx * sizeNum + feesNum + (hasExitOnCreate ? evaluateEquation(exitFeesStr) : 0))}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span className="muted">Available cash</span>
@@ -612,6 +754,7 @@ export function JournalPage() {
                 stop_loss: null,
                 take_profit: null,
                 position_size: sizeNum,
+                strategy_used: null,
                 strategy_ids: selectedStrategyIds,
                 indicators_used: null,
                 entry_date: new Date(entryDateLocal).toISOString(),
@@ -757,6 +900,10 @@ export function JournalPage() {
                     <span className="muted">Exit fees:</span>{' '}
                     <span className="mono">{formatCurrency(selectedTrade.exit_fees ?? 0)}</span>
                   </div>
+                  <div className="detailsLine" style={{ borderTop: '1px solid var(--border)', paddingTop: 4, marginTop: 4 }}>
+                    <span className="muted">Total fees:</span>{' '}
+                    <span className="mono" style={{ fontWeight: 700 }}>{formatCurrency((selectedTrade.fees ?? 0) + (selectedTrade.exit_fees ?? 0))}</span>
+                  </div>
 
                   <div className="detailsActions" style={{ marginTop: 10 }}>
                     <button type="button" className="btn" onClick={beginEdit}>
@@ -830,7 +977,10 @@ export function JournalPage() {
                     />
                   </label>
                   <label>
-                    <div className="label">Fees (entry)</div>
+                    <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Fees (entry)</span>
+                      {evaluateEquation(draft.fees) > 0 && <span className="good" style={{ fontSize: 10 }}>Val: {formatCurrency(evaluateEquation(draft.fees))}</span>}
+                    </div>
                     <input
                       type="text"
                       value={draft.fees}
@@ -839,10 +989,13 @@ export function JournalPage() {
                   </label>
                   <label>
                     <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Exit fees</span>
-                      <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setIsAutoFeesEdit(!isAutoFeesEdit)}>
-                        <input type="checkbox" checked={isAutoFeesEdit} onChange={() => {}} style={{ width: 12, height: 12 }} /> Auto
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>Exit fees</span>
+                        <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: isAutoFeesEdit ? 'var(--accent)' : 'var(--muted)' }} onClick={() => setIsAutoFeesEdit(!isAutoFeesEdit)}>
+                          <input type="checkbox" checked={isAutoFeesEdit} onChange={() => { }} style={{ width: 10, height: 10 }} /> Auto
+                        </span>
+                      </div>
+                      {evaluateEquation(draft.exit_fees) > 0 && <span className="good" style={{ fontSize: 10 }}>Val: {formatCurrency(evaluateEquation(draft.exit_fees))}</span>}
                     </div>
                     <input
                       type="text"
@@ -856,9 +1009,9 @@ export function JournalPage() {
                   </label>
                   <label className="span2">
                     <div className="label">Strategies</div>
-                    <StrategySelect 
-                      selectedIds={draft.strategy_ids} 
-                      allStrategies={allStrategies} 
+                    <StrategySelect
+                      selectedIds={draft.strategy_ids}
+                      allStrategies={allStrategies}
                       onChange={(ids) => setDraft({ ...draft, strategy_ids: ids })}
                       onCreate={async (name) => { createStrategyForEditMutation.mutate(name) }}
                     />
@@ -1013,6 +1166,13 @@ export function JournalPage() {
           </button>
         </div>
       </div>
+      {isDividendModalOpen && (
+        <DividendModal
+          onClose={() => setIsDividendModalOpen(false)}
+          accountId={currentAccount?.id ?? 1}
+          trades={ov?.trades ?? []}
+        />
+      )}
     </div>
   )
 }

@@ -1,18 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api, type Trade } from '../lib/api'
+import { api } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n))
 }
-
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-
-
 
 export function CalculatorsPage() {
   const { currentAccount } = useAccount()

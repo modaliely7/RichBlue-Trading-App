@@ -23,6 +23,9 @@ print(f"DEBUG: pandas imported as pd: {pd}")
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 from .analytics import calc_duration_seconds, calc_pnl, calc_return_pct, calc_risk_reward
 from .db import session_scope
@@ -400,20 +403,142 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
         return res
 
 
-@app.post("/cash/dividend")
-def record_dividend(payload: DividendRequest, account_id: int = 1):
+@app.get("/reports/performance.pdf")
+def performance_report_pdf(account_id: int = 1, start: str | None = None, end: str | None = None) -> Response:
+    analytics = performance_analytics(account_id=account_id, start=start, end=end)
+    adv = analytics.get("advanced", {})
+    overall = analytics.get("overall", {}) or {}
+    closed_trades = analytics.get("closed_trades", 0)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    title_style = ParagraphStyle(
+        'ReportTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.hexColor("#0ea5e9"),
+        spaceAfter=12,
+        alignment=1 # Center
+    )
+    section_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.hexColor("#1e293b"),
+        spaceBefore=16,
+        spaceAfter=8,
+        borderPadding=5,
+        borderWidth=0,
+        backColor=colors.hexColor("#f1f5f9")
+    )
+    metric_label_style = ParagraphStyle('MetricLabel', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
+    metric_value_style = ParagraphStyle('MetricValue', parent=styles['Normal'], fontSize=12, fontWeight='Bold')
+
+    elements = []
+    
+    # Header
+    elements.append(Paragraph("Performance Report", title_style))
+    period_str = f"{start or 'All Time'} to {end or 'Present'}"
+    elements.append(Paragraph(f"Period: {period_str}", styles['Normal']))
+    elements.append(Paragraph(f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+
+    # KPI Grid
+    kpi_data = [
+        [Paragraph("Closed Trades", metric_label_style), Paragraph("Win Rate", metric_label_style), Paragraph("Profit Factor", metric_label_style)],
+        [Paragraph(str(closed_trades), metric_value_style), Paragraph(f"{adv.get('win_rate', 0.0):.1f}%", metric_value_style), Paragraph(f"{adv.get('profit_factor', 0.0):.2f}", metric_value_style)],
+        [Paragraph("Total Net PnL", metric_label_style), Paragraph("Avg Win", metric_label_style), Paragraph("Avg Loss", metric_label_style)],
+        [Paragraph(f"{overall.get('total', 0.0):.2f}", metric_value_style), Paragraph(f"{adv.get('avg_win_amount', 0.0):.2f}", metric_value_style), Paragraph(f"{adv.get('avg_loss_amount', 0.0):.2f}", metric_value_style)],
+    ]
+    kpi_table = Table(kpi_data, colWidths=[180, 180, 180])
+    kpi_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+    ]))
+    elements.append(kpi_table)
+    elements.append(Spacer(1, 20))
+
+    # Top Strategies / Markets
+    elements.append(Paragraph("Performance Highlights", section_style))
+    highlights = []
+    for h_type in ["by_strategy", "by_market"]:
+        data = analytics.get(h_type, [])
+        valid = [d for d in data if d.get("count", 0) >= 3]
+        if valid:
+            valid.sort(key=lambda x: x.get("avg", 0), reverse=True)
+            label = "Strategies" if h_type == "by_strategy" else "Markets"
+            best = valid[0]
+            highlights.append(Paragraph(f"<b>Best {label}:</b> {best.get('key')} ({best.get('count')} trades, Avg PnL: {best.get('avg'):.2f})", styles['Normal']))
+    
+    if highlights:
+        for h in highlights:
+            elements.append(h)
+    else:
+        elements.append(Paragraph("Not enough data for highlights yet (minimum 3 trades per category).", styles['Italic']))
+    
+    elements.append(Spacer(1, 20))
+
+    # Recent Trades Table
+    elements.append(Paragraph("Trade Log", section_style))
     with session_scope() as s:
-        tx = CashTransaction(
-            account_id=account_id,
-            amount=payload.amount,
-            tx_type=CashTxType.dividend,
-            symbol=payload.symbol.strip().upper(),
-            at=payload.at or datetime.now(UTC),
-            note=payload.note or f"Dividend for {payload.symbol}"
-        )
-        s.add(tx)
-        s.commit()
-        return {"status": "success"}
+        stmt = select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.desc()).limit(50)
+        trades = s.execute(stmt).scalars().all()
+        
+        table_data = [["Symbol", "Type", "Entry", "Exit", "PnL", "Return %"]]
+        for t in trades:
+            pnl = calc_pnl(t)
+            ret = calc_return_pct(t)
+            pnl_str = f"{pnl:.2f}" if pnl is not None else "-"
+            ret_str = f"{ret:.2f}%" if ret is not None else "-"
+            
+            row = [
+                t.symbol,
+                t.trade_type.value,
+                t.entry_date.strftime("%Y-%m-%d"),
+                t.exit_date.strftime("%Y-%m-%d") if t.exit_date else "-",
+                pnl_str,
+                ret_str
+            ]
+            table_data.append(row)
+            
+        t = Table(table_data, colWidths=[80, 60, 100, 100, 80, 100])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.hexColor("#f8fafc")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.hexColor("#64748b")),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.hexColor("#e2e8f0")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        # Color PnL column
+        for i, row_data in enumerate(table_data[1:], 1):
+            try:
+                pnl_val = float(row_data[4])
+                if pnl_val > 0:
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.hexColor("#10b981"))]))
+                elif pnl_val < 0:
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.hexColor("#f43f5e"))]))
+            except:
+                pass
+
+        elements.append(t)
+
+    # Build PDF
+    doc.build(elements)
+    buf.seek(0)
+    
+    filename = f"trading_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(buf.getvalue(), media_type="application/pdf", headers=headers)
 
 
 @app.get("/reports/performance.xlsx")
@@ -454,109 +579,62 @@ def performance_report_excel(account_id: int = 1, start: str | None = None, end:
         if "Entry Date Dt" in df.columns:
             df = df.drop(columns=["Entry Date Dt"])
 
+        if df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                pd.DataFrame([{"Message": "No trades found for this period"}]).to_excel(writer, index=False)
+            output.seek(0)
+            return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": 'attachment; filename="report_empty.xlsx"'})
+
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Trades')
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Trades']
+            for i, col in enumerate(df.columns):
+                column_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                worksheet.set_column(i, i, column_len)
         
         output.seek(0)
-        headers = {"Content-Disposition": f'attachment; filename="performance_report_{datetime.now().strftime("%Y%m%d")}.xlsx"'}
+        filename = f"performance_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
         return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
 
-@app.get("/reports/performance.pdf")
-def performance_report_pdf(account_id: int = 1, start: str | None = None, end: str | None = None) -> StreamingResponse:
-    analytics = performance_analytics(start=start, end=end)
-    adv = analytics.get("advanced", {})
+@app.post("/cash/dividend")
+def record_dividend(payload: DividendRequest, account_id: int = 1):
+    with session_scope() as s:
+        # If trade_id is provided, verify it belongs to the account
+        trade = None
+        if payload.trade_id:
+            trade = s.execute(select(Trade).where(Trade.id == payload.trade_id, Trade.account_id == account_id)).scalars().first()
+            if not trade:
+                raise HTTPException(status_code=404, detail="Trade not found")
 
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=letter)
-    w, h = letter
+        amount_val = payload.amount
+        if payload.is_stock_dividend:
+            if not trade:
+                raise HTTPException(status_code=400, detail="Stock dividend requires a linked trade")
+            # Increase position size
+            trade.position_size += payload.amount
+            # Cash impact is zero for stock dividends
+            amount_val = 0.0
+            note = payload.note or f"Stock Dividend ({payload.amount} shares) for {payload.symbol}"
+        else:
+            note = payload.note or f"Cash Dividend for {payload.symbol}"
 
-    def text(x: float, y: float, s: str, size: int = 10):
-        c.setFont("Helvetica", size)
-        c.drawString(x, y, s)
-
-    def heading(y: float, s: str):
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(0.75 * inch, y, s)
-
-    def subheading(y: float, s: str):
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(0.75 * inch, y, s)
-
-    y = h - 0.9 * inch
-    heading(y, "Trading Performance Report")
-    y -= 0.3 * inch
-    period_str = f"{start or 'All'} to {end or 'Now'}"
-    text(0.75 * inch, y, f"Period: {period_str} | Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", 9)
-    y -= 0.35 * inch
-
-    overall = analytics.get("overall", {}) or {}
-    closed_trades = analytics.get("closed_trades", 0)
-    subheading(y, "Summary Metrics")
-    y -= 0.22 * inch
-    
-    col1 = 0.75 * inch
-    col2 = 3.5 * inch
-    
-    text(col1, y, f"Closed trades: {closed_trades}")
-    text(col2, y, f"Win rate: {adv.get('win_rate', 0.0):.1f}%")
-    y -= 0.18 * inch
-    text(col1, y, f"Total Net PnL: {overall.get('total', 0.0):.2f}")
-    text(col2, y, f"Profit Factor: {adv.get('profit_factor', 0.0):.2f}")
-    y -= 0.18 * inch
-    text(col1, y, f"Average Win: {adv.get('avg_win_amount', 0.0):.2f}")
-    text(col2, y, f"Average Loss: {adv.get('avg_loss_amount', 0.0):.2f}")
-    y -= 0.18 * inch
-    text(col1, y, f"Max Win: {adv.get('max_win_amount', 0.0):.2f}")
-    text(col2, y, f"Max Loss: {adv.get('max_loss_amount', 0.0):.2f}")
-    y -= 0.18 * inch
-    text(col1, y, f"Avg Risk/Reward: {adv.get('avg_risk_reward', 0.0):.2f}")
-    text(col2, y, f"Max Risk/Reward: {adv.get('max_risk_reward', 0.0):.2f}")
-    y -= 0.4 * inch
-
-    subheading(y, "Highlights (min 3 trades per bucket)")
-    y -= 0.22 * inch
-
-    def highlight_line(label: str, row: dict | None):
-        nonlocal y
-        if not row:
-            text(0.75 * inch, y, f"{label}: —")
-            y -= 0.18 * inch
-            return
-        text(
-            0.75 * inch,
-            y,
-            f"{label}: {row.get('key')} | trades {row.get('count')} | avg {row.get('avg', 0.0):.2f} | win {row.get('win_rate', 0.0):.2f}%",
+        tx = CashTransaction(
+            account_id=account_id,
+            amount=amount_val,
+            tx_type=CashTxType.dividend,
+            symbol=payload.symbol.strip().upper(),
+            trade_id=payload.trade_id,
+            at=payload.at or datetime.now(UTC),
+            note=note
         )
-        y -= 0.18 * inch
-
-    highlight_line("Best strategy", analytics.get("best_strategy"))
-    highlight_line("Worst strategy", analytics.get("worst_strategy"))
-    highlight_line("Best day", analytics.get("best_day"))
-    highlight_line("Worst day", analytics.get("worst_day"))
-    highlight_line("Best hour", analytics.get("best_hour"))
-    highlight_line("Worst hour", analytics.get("worst_hour"))
-    y -= 0.3 * inch
-
-    subheading(y, "Performance by strategy")
-    y -= 0.22 * inch
-    strategies = analytics.get("by_strategy") or []
-    for r in strategies[:15]:
-        text(0.75 * inch, y, f"- {r.get('key')}: avg {r.get('avg', 0.0):.2f} | trades {r.get('count')} | win {r.get('win_rate', 0.0):.2f}%")
-        y -= 0.16 * inch
-        if y < 1.0 * inch:
-            c.showPage()
-            y = h - 0.9 * inch
-            subheading(y, "Performance by strategy (continued)")
-            y -= 0.25 * inch
-
-    c.showPage()
-    c.save()
-    buf.seek(0)
-    filename = f"performance_report_{datetime.now().strftime('%Y%m%d')}.pdf"
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-    return StreamingResponse(buf, media_type="application/pdf", headers=headers)
+        s.add(tx)
+        return {"status": "success", "new_size": trade.position_size if trade else None}
 
 
 @app.get("/trades", response_model=list[TradeRead])
@@ -588,6 +666,8 @@ def _add_cash_tx(
     tx_type: CashTxType,
     at: datetime | None = None,
     note: str | None = None,
+    trade_id: int | None = None,
+    is_stock_dividend: bool = False,
     trade: Trade | None = None,
 ) -> CashTransaction:
     x = CashTransaction(
@@ -2466,6 +2546,8 @@ def get_fundamentals(symbol: str, refresh: bool = False):
                     'fundamental_score': m.fundamental_score,
                     'fetched_at': m.fetched_at,
                     'provider': m.provider,
+                    'company_name': m.company_name,
+                    'quote_type': m.quote_type,
                 }
 
         # Fetch / Refresh from provider
@@ -2497,6 +2579,8 @@ def get_fundamentals(symbol: str, refresh: bool = False):
                     'fundamental_score': m.fundamental_score,
                     'fetched_at': m.fetched_at,
                     'provider': m.provider,
+                    'company_name': m.company_name,
+                    'quote_type': m.quote_type,
                 }
             raise HTTPException(status_code=404, detail='No fundamentals data available')
         except HTTPException:

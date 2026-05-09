@@ -117,7 +117,7 @@ export function AnalyticsPage() {
     return { labels, values }
   }, [data])
 
-  const adv = data?.advanced ?? {}
+  const adv: any = data?.advanced ?? {}
 
   return (
     <div className="page">

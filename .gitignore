@@ -1,1 +1,10 @@
 node_modules
+dist
+dist-installer
+apps/api/dist
+apps/api/build
+apps/desktop/dist
+__pycache__
+*.pyc
+.venv
+*.spec.bak
