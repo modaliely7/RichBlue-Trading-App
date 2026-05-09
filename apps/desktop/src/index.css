@@ -65,6 +65,81 @@
   color-scheme: light;
 }
 
+:root[data-theme="midnight"] {
+  --bg: #030712;
+  --bg2: #09090b;
+  --panel: rgba(15, 23, 42, 0.8);
+  --panel2: rgba(30, 41, 59, 0.9);
+  --text: #f1f5f9;
+  --text-strong: #ffffff;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+  --border: rgba(139, 92, 246, 0.2);
+  --border-strong: rgba(139, 92, 246, 0.5);
+  --accent: #8b5cf6;
+  --accent-dim: rgba(139, 92, 246, 0.15);
+  --accent-glow: rgba(139, 92, 246, 0.4);
+  --accent2: #f43f5e;
+  --radius: 12px;
+  color-scheme: dark;
+}
+
+:root[data-theme="emerald"] {
+  --bg: #022c22;
+  --bg2: #064e3b;
+  --panel: rgba(6, 78, 59, 0.8);
+  --panel2: rgba(6, 95, 70, 0.9);
+  --text: #ecfdf5;
+  --text-strong: #ffffff;
+  --muted: #94a3b8;
+  --muted2: #d1fae5;
+  --border: rgba(16, 185, 129, 0.2);
+  --accent: #10b981;
+  --accent-dim: rgba(16, 185, 129, 0.15);
+  --accent-glow: rgba(16, 185, 129, 0.4);
+  --accent2: #34d399;
+  --radius: 16px;
+  color-scheme: dark;
+}
+
+:root[data-theme="ocean"] {
+  --bg: #0c4a6e;
+  --bg2: #075985;
+  --panel: rgba(7, 89, 133, 0.8);
+  --panel2: rgba(12, 74, 110, 0.9);
+  --text: #f0f9ff;
+  --text-strong: #ffffff;
+  --muted: #bae6fd;
+  --muted2: #e0f2fe;
+  --border: rgba(56, 189, 248, 0.3);
+  --accent: #0ea5e9;
+  --accent-dim: rgba(14, 165, 233, 0.15);
+  --accent-glow: rgba(14, 165, 233, 0.4);
+  --accent2: #22d3ee;
+  --radius: 20px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg2: #f1f5f9;
+  --panel: #ffffff;
+  --panel2: #f8fafc;
+  --panel-hover: #f1f5f9;
+  --text: #334155;
+  --text-strong: #0f172a;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --accent: #3b82f6;
+  --accent-dim: rgba(59, 130, 246, 0.08);
+  --accent-glow: rgba(59, 130, 246, 0.2);
+  --accent2: #10b981;
+  --radius: 12px;
+  color-scheme: light;
+}
+
 html[data-theme="medred"] {
   background: var(--bg);
 }
@@ -1231,4 +1306,46 @@ textarea:focus {
   .formGrid {
     grid-template-columns: 1fr 1fr;
   }
+}
+/* --- Status Pills ------------------------------------ */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--border);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* --- Strategy Multi-Select --------------------------- */
+.strategySelect {
+  position: relative;
+  width: 100%;
+}
+
+.tagList {
+  transition: all 0.2s;
+}
+
+.tagList:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.strategyDropdown {
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.strategyOption:hover {
+  background: var(--accent-dim) !important;
 }

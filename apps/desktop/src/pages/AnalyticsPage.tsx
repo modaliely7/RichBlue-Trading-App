@@ -93,7 +93,21 @@ export function AnalyticsPage() {
   })
 
   const pdf = useMutation({
-    mutationFn: () => api.downloadPerformancePdf(currentAccount?.id ?? 1),
+    mutationFn: () =>
+      api.exportReportPdf({
+        account_id: currentAccount?.id ?? 1,
+        start: startDate ? new Date(`${startDate}T00:00:00`).toISOString() : undefined,
+        end: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : undefined,
+      }),
+  })
+
+  const excel = useMutation({
+    mutationFn: () =>
+      api.exportReportExcel({
+        account_id: currentAccount?.id ?? 1,
+        start: startDate ? new Date(`${startDate}T00:00:00`).toISOString() : undefined,
+        end: endDate ? new Date(`${endDate}T23:59:59`).toISOString() : undefined,
+      }),
   })
 
   const monthChart = useMemo(() => {
@@ -102,6 +116,8 @@ export function AnalyticsPage() {
     const values = rows.map((r) => r.total)
     return { labels, values }
   }, [data])
+
+  const adv = data?.advanced ?? {}
 
   return (
     <div className="page">
@@ -134,91 +150,137 @@ export function AnalyticsPage() {
               setTimeout(() => URL.revokeObjectURL(url), 2000)
             }}
           >
-            {pdf.isPending ? 'Preparing PDF…' : 'Download PDF report'}
+            {pdf.isPending ? 'Preparing PDF…' : 'PDF Report'}
+          </button>
+          <button
+            className="btn"
+            disabled={excel.isPending}
+            onClick={async () => {
+              const blob = await excel.mutateAsync()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `performance_data_${new Date().toISOString().slice(0, 10)}.xlsx`
+              document.body.appendChild(a)
+              a.click()
+              a.remove()
+              setTimeout(() => URL.revokeObjectURL(url), 2000)
+            }}
+          >
+            {excel.isPending ? 'Preparing Excel…' : 'Export Excel'}
           </button>
         </div>
       </div>
 
       {isLoading ? <div className="muted">Loading…</div> : null}
       {error ? <div className="error">Failed to load analytics. Start the API server.</div> : null}
-      {pdf.error ? <div className="error">Failed to generate PDF report.</div> : null}
 
-      {data ? (
-        <div className="grid kpis">
-          <div className="card kpi">
-            <div className="kpiLabel">Closed trades used</div>
-            <div className="kpiValue">{data.closed_trades}</div>
-          </div>
-          <div className="card kpi tone-good">
-            <div className="kpiLabel">Overall Avg PnL</div>
-            <div className="kpiValue">{formatCurrency(data.overall.avg)}</div>
-          </div>
-          <div className="card kpi">
-            <div className="kpiLabel">Overall Win Rate</div>
-            <div className="kpiValue">{formatPct(data.overall.win_rate)}</div>
-          </div>
-          <div className="card kpi">
-            <div className="kpiLabel">Overall Total</div>
-            <div className={`kpiValue ${data.overall.total >= 0 ? 'good' : 'bad'}`}>{formatCurrency(data.overall.total)}</div>
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+        <div className="mainCol">
+          {data ? (
+            <>
+              <div className="grid kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                <div className="card kpi">
+                  <div className="kpiLabel">Win Rate</div>
+                  <div className="kpiValue good">{formatPct(adv.win_rate)}</div>
+                  <div className="kpiSub">{adv.win_count} Wins / {adv.loss_count} Losses</div>
+                </div>
+                <div className="card kpi">
+                  <div className="kpiLabel">Profit Factor</div>
+                  <div className={`kpiValue ${adv.profit_factor >= 1.5 ? 'good' : adv.profit_factor >= 1 ? 'warn' : 'bad'}`}>
+                    {adv.profit_factor === Infinity ? '∞' : adv.profit_factor?.toFixed(2)}
+                  </div>
+                  <div className="kpiSub">Gross Win / Gross Loss</div>
+                </div>
+                <div className="card kpi">
+                  <div className="kpiLabel">Avg Win / Loss</div>
+                  <div className="kpiValue">
+                    <span className="good" style={{ fontSize: 18 }}>{formatCurrency(adv.avg_win_amount)}</span>
+                    <span style={{ margin: '0 8px', color: 'var(--muted)' }}>/</span>
+                    <span className="bad" style={{ fontSize: 18 }}>{formatCurrency(adv.avg_loss_amount)}</span>
+                  </div>
+                  <div className="kpiSub">Typical trade outcome</div>
+                </div>
+                <div className="card kpi">
+                  <div className="kpiLabel">Max Win / Loss</div>
+                  <div className="kpiValue">
+                    <span className="good" style={{ fontSize: 18 }}>{formatCurrency(adv.max_win_amount)}</span>
+                    <span style={{ margin: '0 8px', color: 'var(--muted)' }}>/</span>
+                    <span className="bad" style={{ fontSize: 18 }}>{formatCurrency(adv.max_loss_amount)}</span>
+                  </div>
+                  <div className="kpiSub">Extremes recorded</div>
+                </div>
+                <div className="card kpi">
+                  <div className="kpiLabel">Avg Risk Reward</div>
+                  <div className="kpiValue">{adv.avg_risk_reward?.toFixed(2)}:1</div>
+                  <div className="kpiSub">Average target RR</div>
+                </div>
+                <div className="card kpi">
+                  <div className="kpiLabel">Total Net PnL</div>
+                  <div className={`kpiValue ${data.overall.total >= 0 ? 'good' : 'bad'}`}>{formatCurrency(data.overall.total)}</div>
+                  <div className="kpiSub">{data.closed_trades} trades total</div>
+                </div>
+              </div>
+
+              <div className="card panel" style={{ marginTop: 20 }}>
+                <div className="panelTitle">Monthly Performance History</div>
+                <div className="chartWrapper small">
+                  <Bar
+                    data={{
+                      labels: monthChart.labels,
+                      datasets: [
+                        {
+                          label: 'PnL',
+                          data: monthChart.values,
+                          backgroundColor: monthChart.values.map((v) =>
+                            v >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
+                          ) as any,
+                          borderColor: monthChart.values.map((v) =>
+                            v >= 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
+                          ) as any,
+                          borderWidth: 1,
+                        },
+                      ],
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: { legend: { display: false } },
+                      scales: {
+                        x: { ticks: { color: 'var(--muted2)' }, grid: { color: 'var(--border)' } },
+                        y: { ticks: { color: 'var(--muted2)' }, grid: { color: 'var(--border)' } },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid panels" style={{ marginTop: 20 }}>
+                <Table title="Market Performance" rows={data?.by_market ?? []} />
+                <Table title="Trade Type Stats" rows={data?.by_trade_type ?? []} />
+              </div>
+
+              <div className="card panel" style={{ marginTop: 20 }}>
+                <Table title="Strategy Breakdown" rows={data?.by_strategy ?? []} />
+              </div>
+            </>
+          ) : null}
         </div>
-      ) : null}
 
-      <div className="grid panels" style={{ marginTop: 12 }}>
-        <TopCard title="Best performing strategy" row={data?.best_strategy ?? null} />
-        <TopCard title="Worst strategy" row={data?.worst_strategy ?? null} />
-        <TopCard title="Best trading day" row={data?.best_day ?? null} />
-        <TopCard title="Worst trading day" row={data?.worst_day ?? null} />
-        <TopCard title="Best trading hour" row={data?.best_hour ?? null} />
-        <TopCard title="Worst trading hour" row={data?.worst_hour ?? null} />
-      </div>
+        <div className="sideCol">
+          <div className="sectionTitle">Highlights</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <TopCard title="Top Strategy" row={data?.best_strategy ?? null} />
+            <TopCard title="Bottom Strategy" row={data?.worst_strategy ?? null} />
+            <TopCard title="Best Day" row={data?.best_day ?? null} />
+            <TopCard title="Best Hour" row={data?.best_hour ?? null} />
+          </div>
 
-      <div className="grid panels" style={{ marginTop: 12 }}>
-        <div className="card panel" style={{ gridColumn: '1 / -1' }}>
-          <div className="panelTitle">Monthly PnL</div>
-          {(data?.by_month?.length ?? 0) === 0 ? (
-            <div className="muted">No monthly data yet.</div>
-          ) : (
-            <div className="chartWrapper small">
-              <Bar
-                data={{
-                  labels: monthChart.labels,
-                  datasets: [
-                    {
-                      label: 'PnL',
-                      data: monthChart.values,
-                      backgroundColor: monthChart.values.map((v) =>
-                        v >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
-                      ) as any,
-                      borderColor: monthChart.values.map((v) =>
-                        v >= 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
-                      ) as any,
-                      borderWidth: 1,
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: { legend: { display: false } },
-                  scales: {
-                    x: { ticks: { maxTicksLimit: 10, color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
-                    y: { ticks: { color: 'rgba(148,163,184,0.9)' }, grid: { color: 'rgba(148,163,184,0.08)' } },
-                  },
-                }}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid panels" style={{ marginTop: 12 }}>
-        <Table title="Performance by market" rows={data?.by_market ?? []} />
-        <Table title="Performance by trade type" rows={data?.by_trade_type ?? []} />
-        <Table title="Performance by day of week" rows={data?.by_day_of_week ?? []} />
-        <Table title="Performance by hour" rows={data?.by_hour ?? []} />
-        <div style={{ gridColumn: '1 / -1' }}>
-          <Table title="Performance by strategy" rows={data?.by_strategy ?? []} />
+          <div className="sectionTitle" style={{ marginTop: 30 }}>Time Analysis</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Table title="By Day of Week" rows={data?.by_day_of_week ?? []} />
+            <Table title="By Hour of Day" rows={data?.by_hour ?? []} />
+          </div>
         </div>
       </div>
     </div>

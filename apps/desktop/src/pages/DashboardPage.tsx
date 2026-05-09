@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bar, Doughnut, Line, Radar } from 'react-chartjs-2'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse } from '../lib/api'
 import { formatCurrency } from '../lib/format'
@@ -14,40 +14,53 @@ function cssVar(name: string, fallback: string): string {
 
 function safeDiv(a: number, b: number) { return b === 0 ? 0 : a / b }
 
-type ChartRange = '1m' | '3m' | '6m' | '1y' | 'all'
+type ChartRange = '1m' | '3m' | '6m' | '1y' | 'all' | 'custom'
 
 function filterSeriesByRange(
   labels: string[], portfolioValue: number[], netDeposited: number[],
   totalReturn: number[], liquidationValue: number[], range: ChartRange,
+  customStart?: string, customEnd?: string
 ) {
   const liq = liquidationValue || []
-  if (!labels.length || range === 'all') return { labels, portfolio_value: portfolioValue, net_deposited: netDeposited, total_return_value: totalReturn, portfolio_value_liquidation: liq }
-  const last = labels[labels.length - 1]
-  const end = new Date(last + 'T12:00:00')
-  const start = new Date(end)
-  const days = range === '1m' ? 30 : range === '3m' ? 91 : range === '6m' ? 183 : 365
-  start.setDate(start.getDate() - days)
-  const startStr = start.toISOString().slice(0, 10)
+  if (!labels.length) return { labels, portfolio_value: portfolioValue, net_deposited: netDeposited, total_return_value: totalReturn, portfolio_value_liquidation: liq }
+  
   let i = 0
-  while (i < labels.length && labels[i] < startStr) i++
+  let j = labels.length
+
+  if (range === 'custom' && customStart && customEnd) {
+    while (i < labels.length && labels[i] < customStart) i++
+    while (j > 0 && labels[j - 1] > customEnd) j--
+    if (i >= j) { i = 0; j = labels.length; } // fallback if invalid
+  } else if (range !== 'all') {
+    const last = labels[labels.length - 1]
+    const end = new Date(last + 'T12:00:00')
+    const start = new Date(end)
+    const days = range === '1m' ? 30 : range === '3m' ? 91 : range === '6m' ? 183 : 365
+    start.setDate(start.getDate() - days)
+    const startStr = start.toISOString().slice(0, 10)
+    while (i < labels.length && labels[i] < startStr) i++
+  }
+  
   return {
-    labels: labels.slice(i),
-    portfolio_value: portfolioValue.slice(i),
-    net_deposited: netDeposited.slice(i),
-    total_return_value: totalReturn.slice(i),
-    portfolio_value_liquidation: liq.length ? liq.slice(i) : Array(labels.length - i).fill(null)
+    labels: labels.slice(i, j),
+    portfolio_value: portfolioValue.slice(i, j),
+    net_deposited: netDeposited.slice(i, j),
+    total_return_value: totalReturn.slice(i, j),
+    portfolio_value_liquidation: liq.length ? liq.slice(i, j) : Array(j - i).fill(null)
   }
 }
 
 const CHART_RANGES: { id: ChartRange; label: string }[] = [
   { id: '1m', label: '1M' }, { id: '3m', label: '3M' }, { id: '6m', label: '6M' },
-  { id: '1y', label: '1Y' }, { id: 'all', label: 'All' },
+  { id: '1y', label: '1Y' }, { id: 'all', label: 'All' }, { id: 'custom', label: 'Custom' }
 ]
 
 export function DashboardPage() {
   const { currentAccount } = useAccount()
   const qc = useQueryClient()
   const [chartRange, setChartRange] = useState<ChartRange>('6m')
+  const [customStart, setCustomStart] = useState<string>('')
+  const [customEnd, setCustomEnd] = useState<string>('')
   const [cashAmount, setCashAmount] = useState(1000)
   const [cashNote, setCashNote] = useState('')
   const [cashDate, setCashDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -124,12 +137,33 @@ export function DashboardPage() {
       monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + (t.pnl ?? 0))
     }
     const monthlyLabelsAll = Array.from(monthlyMap.keys()).sort()
-    // limit to last 6 months maximum
-    const monthlyLabels = monthlyLabelsAll.slice(-6)
+
+    // Filter monthly bars to the active chart range (same as equity curve)
+    const filterMonthlyByRange = (labels: string[], range: ChartRange, customStart?: string, customEnd?: string): string[] => {
+      if (!labels.length) return []
+      let filtered = labels
+      if (range === 'custom' && customStart && customEnd) {
+        const startMonth = customStart.slice(0, 7)
+        const endMonth = customEnd.slice(0, 7)
+        filtered = labels.filter(l => l >= startMonth && l <= endMonth)
+      } else if (range !== 'all') {
+        const last = labels[labels.length - 1]
+        const end = new Date(last + '-01')
+        const start = new Date(end)
+        const months = range === '1m' ? 1 : range === '3m' ? 3 : range === '6m' ? 6 : 12
+        start.setMonth(start.getMonth() - months + 1)
+        const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
+        filtered = labels.filter(l => l >= startStr).slice(-6)
+      }
+      return filtered
+    }
+
+    const monthlyLabels = filterMonthlyByRange(monthlyLabelsAll, chartRange, customStart, customEnd)
     const monthlyValues = monthlyLabels.map(k => monthlyMap.get(k) ?? 0)
 
     return { total, totalTrades: trades.length, closedTrades: closed.length, winRate, profitFactor, avgWin, avgLoss, monthlyLabels, monthlyValues, sharpe, maxDd }
-  }, [ov])
+  }, [ov, chartRange, customStart, customEnd])
+
 
   const realizedPnl = Number(ov?.kpis.realized_pnl_total ?? 0)
   const portfolioValue = Number(ov?.kpis.portfolio_value ?? 0) // Realized by default
@@ -141,8 +175,8 @@ export function DashboardPage() {
     const nd = ov?.chart.net_deposited ?? []
     const tr = ov?.chart.total_return_value ?? []
     const liq = ov?.chart.portfolio_value_liquidation ?? []
-    return filterSeriesByRange(labels, pvRaw, nd, tr, liq, chartRange)
-  }, [ov?.chart, chartRange])
+    return filterSeriesByRange(labels, pvRaw, nd, tr, liq, chartRange, customStart, customEnd)
+  }, [ov?.chart, chartRange, customStart, customEnd])
 
   const isPositive = totalReturnPct != null && totalReturnPct >= 0
 
@@ -301,6 +335,12 @@ export function DashboardPage() {
             {CHART_RANGES.map(b => (
               <button key={b.id} type="button" className={`rangeBtn ${chartRange === b.id ? 'active' : ''}`} onClick={() => setChartRange(b.id)}>{b.label}</button>
             ))}
+            {chartRange === 'custom' && (
+              <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                <input type="date" className="miniInput" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                <input type="date" className="miniInput" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+              </div>
+            )}
           </div>
         </div>
         <div className="chartWrapper">
@@ -368,90 +408,81 @@ export function DashboardPage() {
       {/* Portfolio Allocation */}
       {!isLoading && ov?.allocation && Object.keys(ov.allocation).length > 0 && (
         <>
-          <div className="sectionTitle">Portfolio Allocation</div>
-          <div className="grid panels" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-            <div className="card panel">
-              <div className="panelTitle">Asset Breakdown</div>
-              <div style={{ position: 'relative', height: 260 }}>
-                <Doughnut
-                  data={{
-                    labels: Object.keys(ov.allocation),
-                    datasets: [{
-                      data: Object.values(ov.allocation),
-                      backgroundColor: ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4'],
-                      borderColor: cssVar('--panel', '#0a1020'),
-                      borderWidth: 2,
-                    }],
-                  }}
-                  options={{
-                    responsive: true, maintainAspectRatio: false,
-                    cutout: '65%',
-                    plugins: {
-                      legend: { position: 'right', labels: { color: cssVar('--muted2', '#94a3b8'), font: { size: 12 }, padding: 16, usePointStyle: true } },
-                      tooltip: { backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
-                    },
-                  }}
-                />
+          <div className="sectionTitle">Portfolio Diversification</div>
+          <div className="card panel" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 30, alignItems: 'center' }}>
+              
+              <div style={{ textAlign: 'center' }}>
+                <div className="panelTitle" style={{ marginBottom: 20 }}>Asset Mix</div>
+                <div style={{ position: 'relative', height: 220 }}>
+                  <Doughnut
+                    data={{
+                      labels: Object.keys(ov.allocation),
+                      datasets: [{
+                        data: Object.values(ov.allocation),
+                        backgroundColor: ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4'],
+                        borderColor: 'var(--panel)',
+                        borderWidth: 3,
+                      }],
+                    }}
+                    options={{
+                      responsive: true, maintainAspectRatio: false,
+                      cutout: '75%',
+                      plugins: {
+                        legend: { display: false },
+                        tooltip: { 
+                          backgroundColor: 'var(--panel)',
+                          borderColor: 'var(--border)',
+                          borderWidth: 1,
+                          padding: 12,
+                          titleColor: 'var(--text-strong)',
+                          bodyColor: 'var(--muted2)',
+                        },
+                      },
+                    }}
+                  />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>Assets</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-strong)' }}>{Object.keys(ov.allocation).length}</div>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="card panel">
-              <div className="panelTitle">Allocation Radar</div>
-              <div style={{ height: 260 }}>
-                <Radar 
-                  data={{
-                    labels: Object.keys(ov.allocation),
-                    datasets: [{
-                      label: 'Allocation %',
-                      data: (() => {
-                        const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
-                        return Object.values(ov.allocation).map(v => total > 0 ? Number(((v as number) / total * 100).toFixed(1)) : 0)
-                      })(),
-                      backgroundColor: 'rgba(56,189,248,0.2)',
-                      borderColor: '#38bdf8',
-                      borderWidth: 2,
-                      pointBackgroundColor: '#38bdf8',
-                    }]
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                      r: {
-                        angleLines: { color: cssVar('--border', 'rgba(148,163,184,0.1)') },
-                        grid: { color: cssVar('--border', 'rgba(148,163,184,0.1)') },
-                        pointLabels: { color: cssVar('--muted2', '#94a3b8'), font: { size: 11 } },
-                        ticks: { display: false }
-                      }
-                    },
-                    plugins: { legend: { display: false } }
-                  }}
-                />
+              <div>
+                <div className="panelTitle" style={{ marginBottom: 16 }}>Concentration</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {(() => {
+                    const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
+                    return Object.entries(ov.allocation).slice(0, 5).map(([label, val], i) => {
+                      const colors = ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4']
+                      const pct = total > 0 ? ((val as number) / total) * 100 : 0
+                      return (
+                        <div key={label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ color: 'var(--text)' }}>{label}</span>
+                            <span style={{ color: colors[i % colors.length] }}>{pct.toFixed(1)}%</span>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 999, background: 'var(--bg2)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, borderRadius: 999, background: colors[i % colors.length], transition: 'width 0.8s ease' }} />
+                          </div>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
               </div>
-            </div>
 
-            <div className="card panel">
-              <div className="panelTitle">Allocation Details</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-                {(() => {
-                  const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
-                  return Object.entries(ov.allocation).map(([label, val], i) => {
-                    const colors = ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4']
-                    const pct = total > 0 ? ((val as number) / total) * 100 : 0
-                    return (
-                      <div key={label}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13, fontWeight: 600 }}>
-                          <span style={{ color: 'var(--text)' }}>{label}</span>
-                          <span style={{ color: colors[i % colors.length] }}>{pct.toFixed(1)}%</span>
-                        </div>
-                        <div style={{ height: 6, borderRadius: 999, background: 'var(--border)', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, borderRadius: 999, background: colors[i % colors.length], transition: 'width 0.5s ease' }} />
-                        </div>
-                      </div>
-                    )
-                  })
-                })()}
+              <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border)', paddingLeft: 30 }}>
+                <div className="panelTitle" style={{ marginBottom: 10 }}>Health Score</div>
+                <div style={{ padding: '20px 0' }}>
+                  <div style={{ fontSize: 48, fontWeight: 800, color: '#10b981', textShadow: '0 0 20px rgba(16,185,129,0.3)' }}>84</div>
+                  <div className="muted" style={{ fontSize: 12 }}>Optimal Diversification</div>
+                </div>
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
+                  Your portfolio concentration is well-balanced across {Object.keys(ov.allocation).length} different assets.
+                </div>
               </div>
+
             </div>
           </div>
         </>

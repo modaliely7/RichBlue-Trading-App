@@ -28,6 +28,26 @@ class AccountRead(AccountBase):
     created_at: datetime
 
 
+class StrategyBase(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    color: str | None = Field(default=None, max_length=16)
+
+
+class StrategyCreate(StrategyBase):
+    pass
+
+
+class StrategyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    color: str | None = Field(default=None, max_length=16)
+
+
+class StrategyRead(StrategyBase):
+    id: int
+    account_id: int
+    created_at: datetime
+
+
 class TradeBase(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     market: Market = Market.stocks
@@ -52,7 +72,7 @@ class TradeBase(BaseModel):
 
 
 class TradeCreate(TradeBase):
-    pass
+    strategy_ids: list[int] | None = None
 
 
 class TradeUpdate(BaseModel):
@@ -76,6 +96,7 @@ class TradeUpdate(BaseModel):
     exit_fees: float | None = None
     notes: str | None = None
     lessons_learned: str | None = None
+    strategy_ids: list[int] | None = None
 
 
 class TradeRead(TradeBase):
@@ -86,6 +107,7 @@ class TradeRead(TradeBase):
     return_pct: float | None = None
     risk_reward: float | None = None
     duration_seconds: int | None = None
+    strategies: list[StrategyRead] = []
 
 
 class PsychologyBase(BaseModel):
@@ -265,6 +287,55 @@ class CashWithdrawRequest(BaseModel):
 
 
 class CashAdjustRequest(BaseModel):
+    amount: float
+    at: datetime | None = None
+    note: str | None = None
+
+
+class PerformanceRow(BaseModel):
+    key: str
+    count: int
+    total: float
+    avg: float
+    win_rate: float
+
+
+class PerformanceAdvancedMetrics(BaseModel):
+    win_rate: float
+    avg_win_amount: float
+    max_win_amount: float
+    avg_loss_amount: float
+    max_loss_amount: float
+    avg_risk_reward: float
+    max_risk_reward: float
+    profit_factor: float
+    gross_win: float
+    gross_loss: float
+    closed_count: int
+    win_count: int
+    loss_count: int
+
+
+class PerformanceAnalyticsResponse(BaseModel):
+    overall: dict[str, float]
+    closed_trades: int
+    best_strategy: PerformanceRow | None = None
+    worst_strategy: PerformanceRow | None = None
+    best_day: PerformanceRow | None = None
+    worst_day: PerformanceRow | None = None
+    best_hour: PerformanceRow | None = None
+    worst_hour: PerformanceRow | None = None
+    by_month: list[PerformanceRow] = []
+    by_day_of_week: list[PerformanceRow] = []
+    by_hour: list[PerformanceRow] = []
+    by_strategy: list[PerformanceRow] = []
+    by_market: list[PerformanceRow] = []
+    by_trade_type: list[PerformanceRow] = []
+    advanced: PerformanceAdvancedMetrics | None = None
+
+
+class DividendRequest(BaseModel):
+    symbol: str
     amount: float
     at: datetime | None = None
     note: str | None = None

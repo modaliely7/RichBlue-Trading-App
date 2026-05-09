@@ -6,8 +6,7 @@ import { CalendarPage } from './pages/CalendarPage'
 import { SymbolsPage } from './pages/SymbolsPage'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
-import { AiCoachPage } from './pages/AiCoachPage'
-import { RiskPage } from './pages/RiskPage'
+import { CalculatorsPage } from './pages/CalculatorsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StockFundamentalsPage } from './pages/StockFundamentalsPage'
 import { TechnicalAnalysisPage } from './pages/TechnicalAnalysisPage'
@@ -30,8 +29,7 @@ export default function App() {
           <Route path="/technical" element={<TechnicalAnalysisPage />} />
           <Route path="/smart-money" element={<SmartMoneyPage />} />
           <Route path="/cash" element={<CashPage />} />
-          <Route path="/coach" element={<AiCoachPage />} />
-          <Route path="/risk" element={<RiskPage />} />
+          <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

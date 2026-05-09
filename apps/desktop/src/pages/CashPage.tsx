@@ -22,8 +22,6 @@ export function CashPage() {
   })
 
   const [depositAmount, setDepositAmount] = useState('')
-  const [withdrawAmount, setWithdrawAmount] = useState('')
-  const [adjustAmount, setAdjustAmount] = useState('')
 
   const [editingTxId, setEditingTxId] = useState<number | null>(null)
   const [editAmount, setEditAmount] = useState('')
@@ -53,7 +51,7 @@ export function CashPage() {
         qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
         qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
-      setWithdrawAmount('')
+      setDepositAmount('')
     }
   })
 
@@ -65,7 +63,7 @@ export function CashPage() {
         qc.invalidateQueries({ queryKey: ['cashTransactions', accountId] }),
         qc.invalidateQueries({ queryKey: ['overview', accountId] })
       ])
-      setAdjustAmount('')
+      setDepositAmount('')
     }
   })
 
@@ -135,8 +133,6 @@ export function CashPage() {
                 value={depositAmount}
                 onChange={e => {
                   setDepositAmount(e.target.value)
-                  setWithdrawAmount(e.target.value)
-                  setAdjustAmount(e.target.value)
                 }}
               />
             </label>
@@ -163,7 +159,6 @@ export function CashPage() {
                 disabled={!depositAmount || depositMutation.isPending}
                 onClick={() => {
                   depositMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
-                  setEditDate('')
                   setEditNote('')
                 }}
               >
@@ -175,7 +170,6 @@ export function CashPage() {
                 disabled={!depositAmount || withdrawMutation.isPending}
                 onClick={() => {
                   withdrawMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
-                  setEditDate('')
                   setEditNote('')
                 }}
               >
@@ -186,7 +180,6 @@ export function CashPage() {
                 disabled={!depositAmount || adjustMutation.isPending}
                 onClick={() => {
                   adjustMutation.mutate({ amount: parseFloat(depositAmount), at: editDate ? new Date(editDate).toISOString() : undefined, note: editNote })
-                  setEditDate('')
                   setEditNote('')
                 }}
               >
@@ -264,7 +257,7 @@ export function CashPage() {
                         )}
                       </td>
                       <td>
-                        {['Deposit', 'Withdraw', 'Adjustment'].includes(tx.tx_type) ? (
+                        {['Deposit', 'Withdraw', 'Adjustment', 'Dividend'].includes(tx.tx_type) ? (
                           isEditing ? (
                             <>
                               <button

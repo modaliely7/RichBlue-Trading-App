@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
-import { api, tradeScreenshotPublicUrl, type OverviewResponse } from '../lib/api'
-import type { Market, Trade, TradeCreate, TradeUpdate } from '../lib/api'
+import { api, tradeScreenshotPublicUrl, type OverviewResponse, type Strategy } from '../lib/api'
+import type { Market, Trade, TradeCreate, TradeUpdate, StrategyCreate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 
@@ -45,6 +45,37 @@ function parseDecimal(s: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** 
+ * Safely evaluates simple math expressions for fees.
+ * Supports: digits, ., +, -, *, /, %, (, )
+ * Example: "(100 * 50 * 0.125%) + 3"
+ */
+function evaluateEquation(eq: string): number {
+  if (!eq.trim()) return 0
+  try {
+    // 1. Replace percentages: 0.125% -> (0.125/100)
+    let sanitized = eq.replace(/(\d*\.?\d+)%/g, '($1/100)')
+    
+    // 2. Remove anything that isn't a safe math char
+    sanitized = sanitized.replace(/[^0-9.\+\-\*\/\(\)\s]/g, '')
+    
+    // 3. Eval (simple enough for this use case, and sanitized)
+    // eslint-disable-next-line no-eval
+    const result = eval(sanitized)
+    return Number.isFinite(result) ? result : 0
+  } catch {
+    return 0
+  }
+}
+
+function getTradeStyle(entryDate: string, exitDate: string | null): string {
+  const start = new Date(entryDate).getTime()
+  const end = exitDate ? new Date(exitDate).getTime() : Date.now()
+  const diffDays = (end - start) / (1000 * 60 * 60 * 24)
+  if (diffDays <= 30) return 'Swing'
+  return 'Long Term'
+}
+
 type TradeDraft = {
   symbol: string
   market: Market
@@ -57,6 +88,7 @@ type TradeDraft = {
   entry_date: string
   exit_date: string
   notes: string
+  strategy_ids: number[]
 }
 
 function tradeToDraft(t: Trade): TradeDraft {
@@ -71,8 +103,78 @@ function tradeToDraft(t: Trade): TradeDraft {
     strategy_used: t.strategy_used ?? '',
     entry_date: toDatetimeLocalValue(t.entry_date),
     exit_date: t.exit_date ? toDatetimeLocalValue(t.exit_date) : '',
-    notes: t.notes ?? '',
+    notes: t.notes || '',
+    strategy_ids: (t.strategies || []).map(s => s.id)
   }
+}
+
+function StrategySelect({ 
+  selectedIds, 
+  onChange, 
+  allStrategies,
+  onCreate
+}: { 
+  selectedIds: number[], 
+  onChange: (ids: number[]) => void, 
+  allStrategies: Strategy[],
+  onCreate: (name: string) => Promise<void>
+}) {
+  const [query, setQuery] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+
+  const filtered = allStrategies.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
+  const selected = allStrategies.filter(s => selectedIds.includes(s.id))
+
+  return (
+    <div className="strategySelect" style={{ position: 'relative' }}>
+      <div className="tagList" onClick={() => setIsOpen(!isOpen)} style={{ minHeight: 42, padding: '4px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 4, cursor: 'text' }}>
+        {selected.map(s => (
+          <span key={s.id} className="statusPill" style={{ background: s.color || 'var(--accent-dim)', display: 'flex', alignItems: 'center', gap: 6, border: 'none', color: 'var(--text-strong)' }}>
+            {s.name}
+            <span onClick={(e) => { e.stopPropagation(); onChange(selectedIds.filter(id => id !== s.id)) }} style={{ cursor: 'pointer', opacity: 0.6, fontSize: 14 }}>×</span>
+          </span>
+        ))}
+        <input 
+          placeholder={selectedIds.length === 0 ? "Select strategies..." : ""}
+          value={query}
+          onChange={e => { setQuery(e.target.value); setIsOpen(true) }}
+          onFocus={() => setIsOpen(true)}
+          style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, minWidth: 80, color: 'inherit', padding: '4px 0' }}
+        />
+      </div>
+      {isOpen && (
+        <div className="strategyDropdown card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: 'var(--panel)' }}>
+          {filtered.map(s => (
+            <div 
+              key={s.id} 
+              className="strategyOption"
+              onClick={() => {
+                if (!selectedIds.includes(s.id)) onChange([...selectedIds, s.id])
+                setQuery('')
+                setIsOpen(false)
+              }}
+              style={{ padding: '10px 12px', cursor: 'pointer', background: selectedIds.includes(s.id) ? 'var(--accent-dim)' : 'transparent' }}
+            >
+              {s.name}
+            </div>
+          ))}
+          {query && !allStrategies.some(s => s.name.toLowerCase() === query.toLowerCase()) && (
+            <div 
+              className="strategyOption"
+              style={{ padding: '10px 12px', cursor: 'pointer', color: 'var(--accent)', fontWeight: 600 }}
+              onClick={async () => {
+                await onCreate(query)
+                setQuery('')
+              }}
+            >
+              + Add "{query}"
+            </div>
+          )}
+          {filtered.length === 0 && !query && <div style={{ padding: 12, fontSize: 12, color: 'var(--muted2)' }}>No strategies found. Start typing to add one.</div>}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function JournalPage() {
@@ -95,7 +197,53 @@ export function JournalPage() {
   const [exitDateLocal, setExitDateLocal] = useState<string>('')
   const [feesStr, setFeesStr] = useState('')
   const [exitFeesStr, setExitFeesStr] = useState('')
+  const [isAutoFees, setIsAutoFees] = useState(true)
+  const [isAutoFeesEdit, setIsAutoFeesEdit] = useState(true)
   const [notes, setNotes] = useState<string>('')
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<number[]>([])
+
+  const { data: allStrategies = [], refetch: refetchStrategies } = useQuery({
+    queryKey: ['strategies', currentAccount?.id],
+    queryFn: () => api.listStrategies(currentAccount?.id ?? 1)
+  })
+
+  const createStrategyMutation = useMutation({
+    mutationFn: (name: string) => api.createStrategy({ name }, currentAccount?.id ?? 1),
+    onSuccess: (newSt) => {
+      refetchStrategies()
+      setSelectedStrategyIds(prev => [...prev, newSt.id])
+    }
+  })
+
+  const createStrategyForEditMutation = useMutation({
+    mutationFn: (name: string) => api.createStrategy({ name }, currentAccount?.id ?? 1),
+    onSuccess: (newSt) => {
+      refetchStrategies()
+      if (draft) {
+        setDraft({ ...draft, strategy_ids: [...draft.strategy_ids, newSt.id] })
+      }
+    }
+  })
+
+  // Auto-calculate fees logic
+  useEffect(() => {
+    if (!isAutoFees) return
+    const ep = parseDecimal(entryPriceStr)
+    const sz = parseDecimal(sizeStr)
+    const xp = parseDecimal(exitPriceStr)
+    
+    if (ep > 0 && sz > 0) {
+      setFeesStr(`(${ep} * ${sz} * 0.125 / 100) + 3`)
+    } else {
+      setFeesStr('')
+    }
+
+    if (xp > 0 && sz > 0) {
+      setExitFeesStr(`(${xp} * ${sz} * 0.125 / 100) + 3`)
+    } else {
+      setExitFeesStr('')
+    }
+  }, [isAutoFees, entryPriceStr, exitPriceStr, sizeStr])
 
   const [tradeSearch, setTradeSearch] = useState<string>('')
   const [tradeStatus, setTradeStatus] = useState<'all' | 'open' | 'closed'>('all')
@@ -103,6 +251,20 @@ export function JournalPage() {
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState<TradeDraft | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isAutoFeesEdit || !draft) return
+    const xp = parseDecimal(draft.exit_price)
+    const sz = parseDecimal(draft.position_size)
+    if (xp > 0 && sz > 0) {
+      const calcStr = `(${xp} * ${sz} * 0.125 / 100) + 3`
+      if (draft.exit_fees !== calcStr) {
+        setDraft({ ...draft, exit_fees: calcStr })
+      }
+    } else if (draft.exit_fees !== '' && draft.exit_fees.includes('0.125 / 100')) {
+      setDraft({ ...draft, exit_fees: '' })
+    }
+  }, [isAutoFeesEdit, draft?.exit_price, draft?.position_size])
 
   const selectedTrade = useMemo<Trade | null>(() => {
     if (selectedId == null) return null
@@ -126,7 +288,11 @@ export function JournalPage() {
   const createMutation = useMutation({
     mutationFn: (payload: TradeCreate) => api.createTrade(payload, currentAccount?.id ?? 1),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id ?? 1] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id ?? 1] }),
+      ])
       saveSymbol(symbol.trim().toUpperCase())
       setSymbol('')
       setEntryPriceStr('')
@@ -138,13 +304,18 @@ export function JournalPage() {
       setStrategyUsed('Breakout')
       setExitDateLocal('')
       setEntryDateLocal(defaultEntry)
+      setSelectedStrategyIds([])
     },
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: TradeUpdate }) => api.updateTrade(id, payload),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id ?? 1] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id ?? 1] }),
+      ])
       setEditMode(false)
       setDraft(null)
     },
@@ -153,7 +324,11 @@ export function JournalPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteTrade(id),
     onSuccess: async (_data, deletedId) => {
-      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id ?? 1] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id ?? 1] }),
+      ])
       setSelectedId((cur) => (cur === deletedId ? null : cur))
     },
   })
@@ -184,8 +359,7 @@ export function JournalPage() {
   const cashAvailable = Number(ov?.kpis.cash_balance ?? 0)
   const entryPx = parseDecimal(entryPriceStr)
   const sizeNum = parseDecimal(sizeStr)
-  const feesNum = parseDecimal(feesStr || '0')
-  const exitFeesNum = parseDecimal(exitFeesStr || '0')
+  const feesNum = evaluateEquation(feesStr)
   const hasExitOnCreate = exitPriceStr.trim() !== ''
   const requiredCash = entryPx * sizeNum + feesNum
   const cashOk = !symbol.trim() || requiredCash <= 0 || cashAvailable >= requiredCash - 1e-9
@@ -207,6 +381,9 @@ export function JournalPage() {
         return new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime()
       })
   }, [ov, tradeSearch, tradeStatus])
+
+  const totalBought = useMemo(() => rows.reduce((acc, t) => acc + (t.entry_price * t.position_size), 0), [rows])
+  const totalSold = useMemo(() => rows.reduce((acc, t) => acc + (t.exit_price != null ? t.exit_price * t.position_size : 0), 0), [rows])
 
   const canCreate =
     symbol.trim().length > 0 && entryDateLocal.length > 0 && Number.isFinite(entryPx) && entryPx > 0 && Number.isFinite(sizeNum) && sizeNum > 0
@@ -230,9 +407,9 @@ export function JournalPage() {
         entry_price: ep,
         exit_price: draft.exit_price.trim() === '' ? null : parseDecimal(draft.exit_price),
         position_size: sz,
-        fees: parseDecimal(draft.fees || '0'),
-        exit_fees: parseDecimal(draft.exit_fees || '0'),
-        strategy_used: draft.strategy_used.trim() || null,
+        fees: evaluateEquation(draft.fees),
+        exit_fees: evaluateEquation(draft.exit_fees),
+        strategy_ids: draft.strategy_ids,
         entry_date: new Date(draft.entry_date).toISOString(),
         exit_date: draft.exit_date.trim() ? new Date(draft.exit_date).toISOString() : null,
         notes: draft.notes.trim() || null,
@@ -264,7 +441,7 @@ export function JournalPage() {
               type="text"
               autoComplete="off"
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               placeholder="Any ticker or symbol (free text)"
             />
           </label>
@@ -311,14 +488,21 @@ export function JournalPage() {
             />
           </label>
           <label>
-            <div className="label">Fees (entry)</div>
+            <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Fees (entry)</span>
+              <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setIsAutoFees(!isAutoFees)}>
+                <input type="checkbox" checked={isAutoFees} onChange={() => {}} style={{ width: 12, height: 12 }} /> Auto
+              </span>
+            </div>
             <input
               type="text"
-              inputMode="decimal"
               autoComplete="off"
               value={feesStr}
-              onChange={(e) => setFeesStr((prev) => normalizeDecimalTyping(prev, e.target.value))}
-              placeholder="0"
+              onChange={(e) => {
+                if (isAutoFees) setIsAutoFees(false)
+                setFeesStr(e.target.value)
+              }}
+              placeholder="0 or equation"
             />
           </label>
           {hasExitOnCreate ? (
@@ -326,17 +510,24 @@ export function JournalPage() {
               <div className="label">Exit fees</div>
               <input
                 type="text"
-                inputMode="decimal"
                 autoComplete="off"
                 value={exitFeesStr}
-                onChange={(e) => setExitFeesStr((prev) => normalizeDecimalTyping(prev, e.target.value))}
-                placeholder="0"
+                onChange={(e) => {
+                  if (isAutoFees) setIsAutoFees(false)
+                  setExitFeesStr(e.target.value)
+                }}
+                placeholder="0 or equation"
               />
             </label>
           ) : null}
           <label className="span2">
-            <div className="label">Strategy</div>
-            <input value={strategyUsed} onChange={(e) => setStrategyUsed(e.target.value)} />
+            <div className="label">Strategies</div>
+            <StrategySelect 
+              selectedIds={selectedStrategyIds} 
+              allStrategies={allStrategies} 
+              onChange={setSelectedStrategyIds}
+              onCreate={async (name) => { createStrategyMutation.mutate(name) }}
+            />
           </label>
           <label className="span2">
             <div className="label">Entry date</div>
@@ -421,12 +612,12 @@ export function JournalPage() {
                 stop_loss: null,
                 take_profit: null,
                 position_size: sizeNum,
-                strategy_used: strategyUsed.trim() || null,
+                strategy_ids: selectedStrategyIds,
                 indicators_used: null,
                 entry_date: new Date(entryDateLocal).toISOString(),
                 exit_date: hasExitOnCreate ? new Date(exitDateLocal || defaultEntry).toISOString() : null,
-                fees: feesNum,
-                exit_fees: hasExitOnCreate ? exitFeesNum : 0,
+                fees: evaluateEquation(feesStr),
+                exit_fees: hasExitOnCreate ? evaluateEquation(exitFeesStr) : 0,
                 notes: notes.trim() || null,
                 lessons_learned: null,
               })
@@ -439,10 +630,13 @@ export function JournalPage() {
       </div>
 
       <div className="tradeSplit" style={{ marginTop: 16 }}>
-        <div className="card panel">
+        <div className="card panel" style={{ minWidth: 0 }}>
           <div className="panelTitleRow">
             <div className="panelTitle">Trades</div>
             <div className="detailsActions" style={{ justifyContent: 'flex-end' }}>
+              <div className="muted" style={{ fontSize: 12, marginRight: 12 }}>
+                Bought: {formatCurrency(totalBought)} | Sold: {formatCurrency(totalSold)}
+              </div>
               <input className="miniInput" style={{ width: 180 }} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="Search symbol…" />
               <select className="miniInput" style={{ width: 150 }} value={tradeStatus} onChange={(e) => setTradeStatus(e.target.value as 'all' | 'open' | 'closed')}>
                 <option value="all">All trades</option>
@@ -451,12 +645,13 @@ export function JournalPage() {
               </select>
             </div>
           </div>
-          <div className="tableWrap">
+          <div className="tableWrap" style={{ overflowX: 'auto' }}>
             <table className="table">
               <thead>
                 <tr>
                   <th>Status</th>
                   <th>Symbol</th>
+                  <th>Type</th>
                   <th>Market</th>
                   <th>Entry</th>
                   <th>Exit</th>
@@ -464,6 +659,8 @@ export function JournalPage() {
                   <th>Fees</th>
                   <th>PnL</th>
                   <th>Return</th>
+                  <th>Strategies</th>
+                  <th>Style</th>
                   <th>Duration</th>
                   <th />
                 </tr>
@@ -473,6 +670,7 @@ export function JournalPage() {
                   <tr key={t.id} className={selectedId === t.id ? 'rowSelected' : ''} onClick={() => setSelectedId(t.id)} style={{ cursor: 'pointer' }}>
                     <td className="mono">{t.exit_price == null ? 'OPEN' : 'CLOSED'}</td>
                     <td className="mono">{t.symbol}</td>
+                    <td className="mono">{t.trade_type}</td>
                     <td>{t.market}</td>
                     <td>{t.entry_price}</td>
                     <td>{t.exit_price ?? '—'}</td>
@@ -480,6 +678,17 @@ export function JournalPage() {
                     <td>{formatCurrency((t.fees ?? 0) + (t.exit_fees ?? 0))}</td>
                     <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'}>{t.pnl == null ? '—' : formatCurrency(t.pnl)}</td>
                     <td>{t.return_pct == null ? '—' : formatPct(t.return_pct)}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {t.strategies?.map(s => (
+                          <span key={s.id} className="statusPill" style={{ background: s.color || 'var(--accent-dim)', color: 'var(--text-strong)', border: 'none', fontSize: 10, padding: '2px 6px' }}>
+                            {s.name}
+                          </span>
+                        ))}
+                        {(!t.strategies || t.strategies.length === 0) && <span className="muted">—</span>}
+                      </div>
+                    </td>
+                    <td>{getTradeStyle(t.entry_date, t.exit_price != null ? (t.exit_date || new Date().toISOString()) : null)}</td>
                     <td>{formatDuration(t.duration_seconds)}</td>
                     <td>
                       <button
@@ -507,7 +716,7 @@ export function JournalPage() {
           </div>
         </div>
 
-        <div className="card panel">
+        <div className="card panel" style={{ minWidth: 0 }}>
           <div className="panelTitle">Trade details & actions</div>
           {selectedTrade ? (
             <>
@@ -529,6 +738,18 @@ export function JournalPage() {
                     <span className="muted">Return:</span>{' '}
                     <span>{selectedTrade.return_pct == null ? '—' : formatPct(selectedTrade.return_pct)}</span>
                   </div>
+                  <div className="detailsLine">
+                    <span className="muted">Trade Style:</span>{' '}
+                    <span className="mono">{getTradeStyle(selectedTrade.entry_date, selectedTrade.exit_price != null ? (selectedTrade.exit_date || new Date().toISOString()) : null)}</span>
+                  </div>
+                  <div className="detailsLine">
+                    <span className="muted">Total Bought:</span> <span className="mono">{formatCurrency(selectedTrade.entry_price * selectedTrade.position_size)}</span>
+                  </div>
+                  {selectedTrade.exit_price != null && (
+                    <div className="detailsLine">
+                      <span className="muted">Total Sold:</span> <span className="mono">{formatCurrency(selectedTrade.exit_price * selectedTrade.position_size)}</span>
+                    </div>
+                  )}
                   <div className="detailsLine">
                     <span className="muted">Entry fees:</span> <span className="mono">{formatCurrency(selectedTrade.fees ?? 0)}</span>
                   </div>
@@ -569,7 +790,7 @@ export function JournalPage() {
                 <div className="formGrid detailsForm" style={{ marginTop: 8 }}>
                   <label>
                     <div className="label">Symbol</div>
-                    <input value={draft.symbol} onChange={(e) => setDraft({ ...draft, symbol: e.target.value })} />
+                    <input value={draft.symbol} onChange={(e) => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })} />
                   </label>
                   <label>
                     <div className="label">Market</div>
@@ -612,24 +833,35 @@ export function JournalPage() {
                     <div className="label">Fees (entry)</div>
                     <input
                       type="text"
-                      inputMode="decimal"
                       value={draft.fees}
-                      onChange={(e) => setDraft({ ...draft, fees: normalizeDecimalTyping(draft.fees, e.target.value) })}
+                      onChange={(e) => setDraft({ ...draft, fees: e.target.value })}
                     />
                   </label>
                   <label>
-                    <div className="label">Exit fees</div>
+                    <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Exit fees</span>
+                      <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setIsAutoFeesEdit(!isAutoFeesEdit)}>
+                        <input type="checkbox" checked={isAutoFeesEdit} onChange={() => {}} style={{ width: 12, height: 12 }} /> Auto
+                      </span>
+                    </div>
                     <input
                       type="text"
-                      inputMode="decimal"
                       value={draft.exit_fees}
-                      onChange={(e) => setDraft({ ...draft, exit_fees: normalizeDecimalTyping(draft.exit_fees, e.target.value) })}
+                      onChange={(e) => {
+                        if (isAutoFeesEdit) setIsAutoFeesEdit(false)
+                        setDraft({ ...draft, exit_fees: e.target.value })
+                      }}
                       placeholder="0"
                     />
                   </label>
                   <label className="span2">
-                    <div className="label">Strategy</div>
-                    <input value={draft.strategy_used} onChange={(e) => setDraft({ ...draft, strategy_used: e.target.value })} />
+                    <div className="label">Strategies</div>
+                    <StrategySelect 
+                      selectedIds={draft.strategy_ids} 
+                      allStrategies={allStrategies} 
+                      onChange={(ids) => setDraft({ ...draft, strategy_ids: ids })}
+                      onCreate={async (name) => { createStrategyForEditMutation.mutate(name) }}
+                    />
                   </label>
                   <label className="span2">
                     <div className="label">Entry date</div>

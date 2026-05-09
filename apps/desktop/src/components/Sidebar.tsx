@@ -1,5 +1,4 @@
 import { NavLink } from 'react-router-dom'
-import { useAccount } from './AccountContext'
 
 const sections = [
   {
@@ -30,16 +29,13 @@ const sections = [
   {
     label: 'Tools',
     items: [
-      { to: '/risk', icon: '🛡️', label: 'Risk Manager' },
-      { to: '/coach', icon: '🤖', label: 'AI Coach' },
+      { to: '/calculators', icon: '🛡️', label: 'Calculators' },
       { to: '/settings', icon: '⚙️', label: 'Settings' },
     ],
   },
 ]
 
 export function Sidebar() {
-  const { accounts, currentAccount, setCurrentAccount } = useAccount()
-
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -50,28 +46,6 @@ export function Sidebar() {
             <span style={{ color: '#93c5fd' }}>chBlue</span>
           </div>
           <div className="brandSub">Pro Analytics</div>
-        </div>
-      </div>
-
-      <div className="accountSwitcher">
-        <div className="label" style={{ padding: '0 12px 6px', fontSize: 10 }}>ACTIVE ACCOUNT</div>
-        <div className="accountSelector">
-          <select
-            value={currentAccount?.id || ''}
-            onChange={(e) => {
-              const acc = accounts.find(a => a.id === Number(e.target.value))
-              if (acc) setCurrentAccount(acc)
-            }}
-          >
-            {accounts.map(acc => (
-              <option key={acc.id} value={acc.id}>
-                {acc.account_type === 'Real' ? '🔵' : '🧪'} {acc.name}
-              </option>
-            ))}
-          </select>
-          <div className="accountType">
-            {currentAccount?.account_type}
-          </div>
         </div>
       </div>
 
