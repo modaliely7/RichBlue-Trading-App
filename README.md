@@ -1,129 +1,100 @@
-# 🚀 Trading Analytics Platform
+# 💎 RichBlue Pro Analytics
 
-A powerful, data-driven trading journal and analytics dashboard for EGX and global stocks. Track your trades, analyze your psychology, and optimize your performance with AI-driven insights.
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/modaliely7/Trading-App-curser)
+[![Platform](https://img.shields.io/badge/platform-Windows-brightgreen.svg)](https://github.com/modaliely7/Trading-App-curser)
+[![License](https://img.shields.io/badge/license-MIT-orange.svg)](https://github.com/modaliely7/Trading-App-curser)
+[![Aesthetics](https://img.shields.io/badge/UI-Premium%20Glassmorphism-purple.svg)](https://github.com/modaliely7/Trading-App-curser)
+
+> **RichBlue Pro Analytics** is a high-performance, data-driven trading journal and financial intelligence dashboard. Designed for professional traders who demand precision, security, and premium aesthetics.
+
+---
 
 ## ✨ Key Features
 
-### 📊 Dashboard
-The central hub for your trading activity. View your equity curve, portfolio allocation, and manage your cash balance.
-- **Cash Management**: Quickly deposit or withdraw funds to keep your ledger up to date.
-- **Allocation Radar**: Visualize your asset distribution across Stocks, Cash, and Funds.
-- **Equity Curve**: Track your portfolio growth (Realized vs. Liquidation value).
+### 📊 Elite Dashboard
+The command center for your capital. Experience a unified view of your financial health with real-time equity curves and portfolio radar.
+- **Dynamic PnL Tracking**: Monitor realized vs. liquidation value with precision.
+- **Smart Cash Management**: One-click deposits/withdrawals with an automated ledger.
+- **Asset Allocation Radar**: Visualize your exposure across Stocks, Funds, and Cash instantly.
 
-![Dashboard](media/dashboard.png)
+### 📓 Advanced Trade Journal
+A zero-friction logging experience tailored for speed and detail.
+- **Unified Trade Model**: Simplified entry logic for Stocks, Crypto, Forex, and Funds.
+- **Auto-Fee Calculation**: Built-in logic for automatic fee deduction `(Value * 0.125%) + 3`.
+- **Strategy Tagging**: Link every trade to your custom edge and edge-case strategies.
 
-### 📁 Portfolio
-Detailed breakdown of your current holdings and cash balance.
-- **Asset Mix**: Pie chart visualization of your total exposure.
-- **Position Tracking**: Monitor open quantities, average cost, and unrealized P&L.
+### 🎯 Strategy Intelligence
+Refine your edge with deep analytics.
+- **Win-Rate Heatmaps**: Identify which strategies deliver the highest expectancy.
+- **Time-Series Analysis**: Discover your most profitable trading hours and days.
+- **Performance Reports**: Export professional PDF and Excel reports with a single click.
 
-![Portfolio](media/portfolio.png)
-
-### 📓 Trade Journal
-A comprehensive log of all your trades with search and filter capabilities.
-- **Trade Details**: Log entries, exits, strategies, and lessons learned.
-- **Performance Metrics**: Automatic calculation of P&L, Win Rate, and Risk/Reward.
-
-![Trade Journal](media/trades.png)
-
-### 📅 Calendar
-Visualize your trading performance over time. See your wins and losses mapped to a monthly calendar.
-
-![Calendar](media/calendar.png)
-
-### 📈 Analytics
-Deep-dive into your performance with strategy and time-based breakdowns.
-- **Performance by Strategy**: Identify your most profitable trading setups.
-- **Time Analysis**: See which days of the week or hours of the day you perform best.
-
-![Analytics](media/analytics.png)
-
-### 🤖 AI Trading Coach
-Data-driven feedback on your trading habits and emotional state.
-- **Emotional Balance**: Radar chart showing the distribution of your logged emotions.
-- **Coach's Verdict**: Automatic insights based on your trade history (e.g., "Stop trading when Fearful").
-
-![AI Coach](media/ai_coach.png)
-
-### 🛡️ Risk Management
-Keep your capital safe with built-in risk tools.
-- **Position Sizing**: Calculate the correct size for your next trade based on your risk tolerance.
-- **Loss Limits**: Monitor your daily loss limit and maximum drawdown in real-time.
-
-![Risk Management](media/risk.png)
-
-### 🔬 Advanced Analysis
-- **Fundamentals**: Detailed stock metrics including P/E ratio, revenue growth, and debt-to-equity.
-- **Technical Analysis**: Real-time technical indicators and chart patterns.
-- **Smart Money Flow**: Track institutional buying and selling pressure.
-
-![Fundamentals](media/fundamentals.png)
-![Technical](media/technical.png)
-![Smart Money](media/smart_money.png)
+### ⚙️ Premium Settings & Customization
+A completely redesigned settings interface with glassmorphism aesthetics.
+- **Multi-Account Support**: Manage up to 3 independent trading portfolios.
+- **Theme Engine**: Choose between Midnight Blue, Deep Ocean, Emerald City, and more.
+- **Data Sovereignty**: Local-first architecture. Backup, restore, or wipe your data instantly.
 
 ---
 
 ## 🛠️ Technology Stack
-- **Frontend**: React, Vite, Chart.js, TanStack Query.
-- **Backend**: FastAPI (Python), SQLAlchemy, SQLite.
-- **Desktop**: Electron (Optional wrapper).
+
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | React 19, Vite, Chart.js, TanStack Query |
+| **Backend** | FastAPI (Python 3.13), SQLAlchemy, SQLite |
+| **Desktop** | Electron 37 (Native Windows Wrapper) |
+| **Styles** | Vanilla CSS (Premium Design System) |
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- Node.js (v18+)
-- Python (3.10+)
+### 📦 Standalone Distribution (Recommended)
+For the best experience, use our one-click Windows installer:
+1. Navigate to `dist-installer/`.
+2. Run `RichBlue Setup 1.0.0.exe`.
+3. Start trading.
 
-### Installation
+### 👨‍💻 Development Setup
 
-1. **Clone the repository**:
+1. **Clone & Install**:
    ```bash
-   git clone <repository-url>
-   cd trading-app-curser
-   ```
-
-2. **Install Frontend Dependencies**:
-   ```bash
+   git clone https://github.com/modaliely7/Trading-App-curser.git
+   cd Trading-App-curser
    npm install
    ```
 
-3. **Install Backend Dependencies**:
-
-   **On Windows**:
+2. **Backend Setup**:
    ```bash
    cd apps/api
    python -m venv .venv
    .venv\Scripts\activate
    pip install -r requirements.txt
-   alembic upgrade head
-   cd ../..
    ```
 
-   **On macOS/Linux**:
+3. **Launch Dev Environment**:
    ```bash
-   cd apps/api
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   alembic upgrade head
-   cd ../..
+   # From root
+   npm run dev
    ```
-
-### Running the App
-
-Start both the API and the Desktop frontend concurrently:
-```bash
-npm run dev
-```
-
-The API will start on `http://127.0.0.1:8001` and the frontend on `http://localhost:5173`.
 
 ---
 
-## 📁 Project Structure
-- `apps/api`: FastAPI backend and database models.
-- `apps/desktop`: React frontend application.
-- `packages/shared`: Shared types and utilities.
-- `media`: Screenshots and assets for documentation.
+## 🏗️ Build Pipeline
+
+To generate a new standalone Windows installer:
+```powershell
+.\build.ps1
+```
+*Requires PowerShell with execution permissions.*
+
+---
+
+## 🛡️ AI & Maintenance
+This project includes a dedicated `AI_INSTRUCTIONS.md` file. If you are using an AI coding assistant, ensure it reads that file before making any modifications to preserve architectural integrity.
+
+---
+
+## 📄 License
+Copyright © 2025 RichBlue Pro Analytics. Licensed under the MIT License.
