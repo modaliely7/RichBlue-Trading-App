@@ -18,10 +18,6 @@ class Market(str, enum.Enum):
     forex = "Forex"
 
 
-class TradeType(str, enum.Enum):
-    long = "Long"
-    short = "Short"
-
 
 class AccountType(str, enum.Enum):
     real = "Real"
@@ -63,7 +59,6 @@ class Trade(Base):
 
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     market: Mapped[Market] = mapped_column(Enum(Market), default=Market.stocks, index=True)
-    trade_type: Mapped[TradeType] = mapped_column(Enum(TradeType), default=TradeType.long, index=True)
 
     entry_price: Mapped[float] = mapped_column(Float)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)

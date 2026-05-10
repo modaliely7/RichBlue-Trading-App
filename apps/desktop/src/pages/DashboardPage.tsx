@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse } from '../lib/api'
@@ -57,43 +57,23 @@ const CHART_RANGES: { id: ChartRange; label: string }[] = [
 
 export function DashboardPage() {
   const { currentAccount } = useAccount()
-  const qc = useQueryClient()
+
   const [chartRange, setChartRange] = useState<ChartRange>('6m')
   const [customStart, setCustomStart] = useState<string>('')
   const [customEnd, setCustomEnd] = useState<string>('')
-  const [cashAmount, setCashAmount] = useState(1000)
-  const [cashNote, setCashNote] = useState('')
-  const [cashDate, setCashDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [depositMsg, setDepositMsg] = useState<string | null>(null)
-  const [showCash, setShowCash] = useState(false)
+
 
   const { data: ov, isLoading, error } = useQuery<OverviewResponse>({
     queryKey: ['overview', currentAccount?.id],
     queryFn: () => api.overview(currentAccount?.id ?? 1),
   })
 
-  const depositMutation = useMutation({
-    mutationFn: (p: { amount: number; at?: string; note?: string }) => api.cashDeposit(p, currentAccount?.id ?? 1),
-    onSuccess: async (data: any) => {
-      await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
-      setCashNote('')
-      const bal = data?.balance
-      const txid = data?.tx_id
-      setDepositMsg(txid != null ? `✓ Deposit ok — Balance: ${formatCurrency(Number(bal))}` : '✓ Deposit successful')
-      setTimeout(() => setDepositMsg(null), 5000)
-    },
-    onError: (err: any) => { setDepositMsg(`✗ ${err?.message ?? 'Deposit failed'}`); setTimeout(() => setDepositMsg(null), 5000) },
-  })
 
-  const withdrawMutation = useMutation({
-    mutationFn: (p: { amount: number; note?: string }) => api.cashWithdraw(p, currentAccount?.id ?? 1),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }); setCashNote('') },
-  })
 
   const cashAvailable = Number(ov?.kpis.cash_balance ?? 0)
   const netDeposited = Number(ov?.kpis.net_deposited ?? 0)
   const investedCapital = Number(ov?.kpis.assets_market_value ?? 0)
-  const canWithdraw = cashAmount > 0 && cashAmount <= cashAvailable
+
 
   const computed = useMemo(() => {
     const trades = ov?.trades ?? []
@@ -275,53 +255,7 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Cash Actions */}
-      <div className="sectionTitle">Cash Management</div>
-      <div className="card panel" style={{ marginBottom: 24 }}>
-        <div className="panelTitleRow">
-          <div>
-            <div className="panelTitle">Deposit / Withdraw</div>
-            <div className="muted" style={{ fontSize: 12 }}>Available: <strong style={{ color: 'var(--text-strong)' }}>{formatCurrency(cashAvailable)}</strong></div>
-          </div>
-          <button type="button" className="btnGhost btn" onClick={() => setShowCash(v => !v)}>
-            {showCash ? 'Hide' : 'Show'} form
-          </button>
-        </div>
 
-        {showCash && (
-          <div className="formGrid" style={{ marginTop: 12 }}>
-            <label>
-              <div className="label">Amount</div>
-              <input type="number" value={cashAmount} onChange={e => setCashAmount(Number(e.target.value))} />
-            </label>
-            <label>
-              <div className="label">Date</div>
-              <input type="date" value={cashDate} onChange={e => setCashDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
-            </label>
-            <label className="span2">
-              <div className="label">Note (optional)</div>
-              <input value={cashNote} onChange={e => setCashNote(e.target.value)} placeholder="e.g. Monthly deposit" />
-            </label>
-            <div className="detailsActions" style={{ marginTop: 4 }}>
-              <button type="button" className="btn" disabled={depositMutation.isPending || !(cashAmount > 0)}
-                onClick={() => depositMutation.mutate({ amount: cashAmount, at: cashDate ? new Date(`${cashDate}T00:00:00`).toISOString() : undefined, note: cashNote.trim() || undefined })}>
-                {depositMutation.isPending ? '⟳ Processing…' : '↑ Deposit'}
-              </button>
-              <button type="button" className="btn btnGhost" disabled={withdrawMutation.isPending || !canWithdraw}
-                onClick={() => withdrawMutation.mutate({ amount: cashAmount, note: cashNote.trim() || undefined })}>
-                {withdrawMutation.isPending ? '⟳ Processing…' : '↓ Withdraw'}
-              </button>
-              <button type="button" className="btn btnGhost" onClick={() => { setCashAmount(1000); setCashDate(new Date().toISOString().slice(0, 10)); setCashNote('') }}>Reset</button>
-            </div>
-            {depositMsg && (
-              <div className={depositMsg.includes('✗') ? 'error' : 'good'} style={{ marginTop: 6, fontSize: 13 }}>{depositMsg}</div>
-            )}
-            {!canWithdraw && cashAmount > 0 && (
-              <div className="error" style={{ fontSize: 12 }}>Insufficient cash (Available: {formatCurrency(cashAvailable)})</div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Equity Chart */}
       <div className="sectionTitle">Equity Curve</div>

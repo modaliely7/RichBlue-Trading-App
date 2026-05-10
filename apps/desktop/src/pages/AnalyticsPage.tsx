@@ -257,10 +257,9 @@ export function AnalyticsPage() {
 
               <div className="grid panels" style={{ marginTop: 20 }}>
                 <Table title="Market Performance" rows={data?.by_market ?? []} />
-                <Table title="Trade Type Stats" rows={data?.by_trade_type ?? []} />
               </div>
 
-              <div className="card panel" style={{ marginTop: 20 }}>
+              <div style={{ marginTop: 20 }}>
                 <Table title="Strategy Breakdown" rows={data?.by_strategy ?? []} />
               </div>
             </>

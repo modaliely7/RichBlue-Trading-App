@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .models import Trade, TradeType
+from .models import Trade
 
 
 def calc_pnl(trade: Trade) -> float | None:
     if trade.exit_price is None:
         return None
-    direction = 1.0 if trade.trade_type == TradeType.long else -1.0
-    gross = (trade.exit_price - trade.entry_price) * direction * trade.position_size
+    gross = (trade.exit_price - trade.entry_price) * trade.position_size
     entry_fees = float(trade.fees or 0.0)
     exit_fees = float(getattr(trade, "exit_fees", 0.0) or 0.0)
     return gross - entry_fees - exit_fees

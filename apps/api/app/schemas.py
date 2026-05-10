@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, TradeType, AccountType
+from .models import AssetClass, CashTxType, LessonCategory, Market, PsychologyState, AccountType
 
 
 class AccountBase(BaseModel):
@@ -51,7 +51,6 @@ class StrategyRead(StrategyBase):
 class TradeBase(BaseModel):
     symbol: str = Field(min_length=1, max_length=32)
     market: Market = Market.stocks
-    trade_type: TradeType = TradeType.long
 
     entry_price: float
     exit_price: float | None = None
@@ -78,7 +77,6 @@ class TradeCreate(TradeBase):
 class TradeUpdate(BaseModel):
     symbol: str | None = Field(default=None, min_length=1, max_length=32)
     market: Market | None = None
-    trade_type: TradeType | None = None
 
     entry_price: float | None = None
     exit_price: float | None = None
@@ -330,7 +328,6 @@ class PerformanceAnalyticsResponse(BaseModel):
     by_hour: list[PerformanceRow] = []
     by_strategy: list[PerformanceRow] = []
     by_market: list[PerformanceRow] = []
-    by_trade_type: list[PerformanceRow] = []
     advanced: PerformanceAdvancedMetrics | None = None
 
 
@@ -339,6 +336,7 @@ class DividendRequest(BaseModel):
     amount: float
     at: datetime | None = None
     note: str | None = None
+    is_stock_dividend: bool = False
 
 
 class CashBalanceResponse(BaseModel):

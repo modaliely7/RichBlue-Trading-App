@@ -1,5 +1,4 @@
 export type Market = 'Stocks' | 'Funds' | 'Crypto' | 'Forex'
-export type TradeType = 'Long' | 'Short'
 
 export type PsychologyState = 'Confident' | 'Fear' | 'FOMO' | 'Calm' | 'Overtrading'
 
@@ -93,7 +92,6 @@ export type PerformanceAnalyticsResponse = {
   by_hour: PerfRow[]
   by_strategy: PerfRow[]
   by_market: PerfRow[]
-  by_trade_type: PerfRow[]
   advanced?: PerformanceAdvancedMetrics
 }
 
@@ -196,7 +194,6 @@ export type Trade = {
   id: number
   symbol: string
   market: Market
-  trade_type: TradeType
   entry_price: number
   exit_price: number | null
   stop_loss: number | null
@@ -234,7 +231,6 @@ export type TradeUpdate = Partial<
     Trade,
     | 'symbol'
     | 'market'
-    | 'trade_type'
     | 'entry_price'
     | 'exit_price'
     | 'stop_loss'
@@ -412,8 +408,10 @@ export const api = {
     return download(`/reports/performance.xlsx?${q.toString()}`)
   },
 
-  recordDividend: (payload: { account_id: number; symbol: string; amount: number }) =>
+  recordDividend: (payload: { account_id: number; symbol: string; amount: number; is_stock_dividend?: boolean }) =>
     apiFetch<{ status: string }>('/cash/dividend', { method: 'POST', body: JSON.stringify(payload) }),
+  recordTradeDividend: (tradeId: number, payload: { amount: number; is_stock_dividend: boolean; at?: string; note?: string }) =>
+    apiFetch<{ status: string }>(`/trades/${tradeId}/dividend`, { method: 'POST', body: JSON.stringify(payload) }),
 
   overview: (accountId: number = 1, method?: string) => {
     const q = new URLSearchParams()

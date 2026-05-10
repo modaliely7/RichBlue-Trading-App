@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select
+from sqlalchemy.orm import selectinload
 import bisect
 
 import numpy as np
@@ -59,7 +60,6 @@ from .models import (
     PsychologyEntry,
     PsychologyState,
     Trade,
-    TradeType,
     Strategy,
     trade_strategy_table,
 )
@@ -136,7 +136,6 @@ def _to_trade_read(t: Trade) -> TradeRead:
         id=t.id,
         symbol=t.symbol,
         market=t.market,
-        trade_type=t.trade_type,
         entry_price=t.entry_price,
         exit_price=t.exit_price,
         stop_loss=t.stop_loss,
@@ -321,7 +320,9 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
             if not x:
                 return None
             try:
-                return datetime.fromisoformat(x.replace("Z", "+00:00"))
+                # Handle Z or +00:00 then strip tzinfo to avoid naive/aware mismatch
+                dt = datetime.fromisoformat(x.replace("Z", "+00:00"))
+                return dt.replace(tzinfo=None)
             except:
                 return None
 
@@ -343,11 +344,14 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
                 "win_rate": float(wins / len(pnls) * 100.0),
             }
 
-        def group(key_fn):
+        def group(key_fn, multi=False):
             buckets: dict[str, list[float]] = {}
             for t in closed:
-                k = key_fn(t)
-                buckets.setdefault(k, []).append(calc_pnl(t) or 0.0)
+                keys = key_fn(t)
+                if not multi:
+                    keys = [keys]
+                for k in keys:
+                    buckets.setdefault(k, []).append(calc_pnl(t) or 0.0)
             rows = []
             for k, pnls in buckets.items():
                 s2 = summarize_pnls(pnls)
@@ -360,9 +364,11 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
         
         by_dow = group(lambda t: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][trade_dt(t).weekday()])
         by_hour = group(lambda t: f"{trade_dt(t).hour:02d}:00")
-        by_strategy = group(lambda t: (t.strategy_used or "").strip() or "Unspecified")
+        
+        # Multiple strategies per trade
+        by_strategy = group(lambda t: [s.name for s in t.strategies] if t.strategies else ["Unspecified"], multi=True)
+        
         by_market = group(lambda t: t.market.value)
-        by_type = group(lambda t: t.trade_type.value)
 
         best_hour = next((r for r in by_hour if r["count"] >= 3), None)
         worst_hour = next((r for r in reversed(by_hour) if r["count"] >= 3), None) if by_hour else None
@@ -380,7 +386,6 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
             "by_hour": by_hour,
             "by_strategy": by_strategy,
             "by_market": by_market,
-            "by_trade_type": by_type,
             "advanced": advanced,
             "best_strategy": None,
             "worst_strategy": None,
@@ -419,7 +424,7 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
         'ReportTitle',
         parent=styles['Heading1'],
         fontSize=24,
-        textColor=colors.hexColor("#0ea5e9"),
+        textColor=colors.HexColor("#0ea5e9"),
         spaceAfter=12,
         alignment=1 # Center
     )
@@ -427,12 +432,12 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
         'SectionHeader',
         parent=styles['Heading2'],
         fontSize=14,
-        textColor=colors.hexColor("#1e293b"),
+        textColor=colors.HexColor("#1e293b"),
         spaceBefore=16,
         spaceAfter=8,
         borderPadding=5,
         borderWidth=0,
-        backColor=colors.hexColor("#f1f5f9")
+        backColor=colors.HexColor("#f1f5f9")
     )
     metric_label_style = ParagraphStyle('MetricLabel', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
     metric_value_style = ParagraphStyle('MetricValue', parent=styles['Normal'], fontSize=12, fontWeight='Bold')
@@ -444,6 +449,26 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
     period_str = f"{start or 'All Time'} to {end or 'Present'}"
     elements.append(Paragraph(f"Period: {period_str}", styles['Normal']))
     elements.append(Paragraph(f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", styles['Normal']))
+    elements.append(Spacer(1, 10))
+
+    # Summary Box
+    summary_data = [
+        [Paragraph("Portfolio Summary", styles['Heading3']), ""],
+        [Paragraph(f"Total Net PnL: {overall.get('total', 0.0):.2f}", styles['Normal']), 
+         Paragraph(f"Win Rate: {adv.get('win_rate', 0.0):.1f}%", styles['Normal'])],
+        [Paragraph(f"Profit Factor: {adv.get('profit_factor', 0.0):.2f}", styles['Normal']), 
+         Paragraph(f"Total Trades: {closed_trades}", styles['Normal'])]
+    ]
+    summary_table = Table(summary_data, colWidths=[270, 270])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ('SPAN', (0, 0), (1, 0)),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0")),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(summary_table)
     elements.append(Spacer(1, 20))
 
     # KPI Grid
@@ -486,36 +511,50 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
     # Recent Trades Table
     elements.append(Paragraph("Trade Log", section_style))
     with session_scope() as s:
-        stmt = select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.desc()).limit(50)
+        # Use the same date parsing as performance_analytics
+        def parse_iso_naive(x: str | None) -> datetime | None:
+            if not x: return None
+            try:
+                return datetime.fromisoformat(x.replace("Z", "+00:00")).replace(tzinfo=None)
+            except: return None
+            
+        s_dt = parse_iso_naive(start)
+        e_dt = parse_iso_naive(end)
+        
+        stmt = select(Trade).where(Trade.account_id == account_id).options(selectinload(Trade.strategies))
+        if s_dt:
+            stmt = stmt.where(Trade.entry_date >= s_dt)
+        if e_dt:
+            stmt = stmt.where(Trade.entry_date <= e_dt)
+            
+        stmt = stmt.order_by(Trade.entry_date.desc()).limit(50)
         trades = s.execute(stmt).scalars().all()
         
-        table_data = [["Symbol", "Type", "Entry", "Exit", "PnL", "Return %"]]
+        table_data = [["Symbol", "Entry", "Exit", "PnL", "Strategies"]]
         for t in trades:
             pnl = calc_pnl(t)
-            ret = calc_return_pct(t)
             pnl_str = f"{pnl:.2f}" if pnl is not None else "-"
-            ret_str = f"{ret:.2f}%" if ret is not None else "-"
+            strategies_str = ", ".join([s.name for s in t.strategies])
             
             row = [
                 t.symbol,
-                t.trade_type.value,
                 t.entry_date.strftime("%Y-%m-%d"),
                 t.exit_date.strftime("%Y-%m-%d") if t.exit_date else "-",
                 pnl_str,
-                ret_str
+                strategies_str
             ]
             table_data.append(row)
             
-        t = Table(table_data, colWidths=[80, 60, 100, 100, 80, 100])
+        t = Table(table_data, colWidths=[90, 100, 100, 90, 160])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.hexColor("#f8fafc")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.hexColor("#64748b")),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f8fafc")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#64748b")),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.hexColor("#e2e8f0")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ]))
         
@@ -524,9 +563,9 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
             try:
                 pnl_val = float(row_data[4])
                 if pnl_val > 0:
-                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.hexColor("#10b981"))]))
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#10b981"))]))
                 elif pnl_val < 0:
-                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.hexColor("#f43f5e"))]))
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#f43f5e"))]))
             except:
                 pass
 
@@ -544,14 +583,17 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
 @app.get("/reports/performance.xlsx")
 def performance_report_excel(account_id: int = 1, start: str | None = None, end: str | None = None) -> Response:
     with session_scope() as s:
-        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
+        trades = s.execute(
+            select(Trade)
+            .where(Trade.account_id == account_id)
+            .options(selectinload(Trade.strategies))
+        ).scalars().all()
         data = []
         for t in trades:
             data.append({
                 "ID": t.id,
                 "Symbol": t.symbol,
                 "Market": t.market.value,
-                "Type": t.trade_type.value,
                 "Entry Price": t.entry_price,
                 "Exit Price": t.exit_price,
                 "Size": t.position_size,
@@ -560,21 +602,25 @@ def performance_report_excel(account_id: int = 1, start: str | None = None, end:
                 "Entry Date": t.entry_date.strftime("%Y-%m-%d %H:%M"),
                 "Exit Date": t.exit_date.strftime("%Y-%m-%d %H:%M") if t.exit_date else "",
                 "Fees": (t.fees or 0) + (t.exit_fees or 0),
-                "Strategy": t.strategy_used,
+                "Strategy": ", ".join([s.name for s in t.strategies]),
                 "Notes": t.notes
             })
         
         df = pd.DataFrame(data)
         
         # Filter by date if provided
-        if start:
-            s_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        if start or end:
             df["Entry Date Dt"] = pd.to_datetime(df["Entry Date"])
-            df = df[df["Entry Date Dt"] >= s_dt]
-        if end:
-            e_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
-            df["Entry Date Dt"] = pd.to_datetime(df["Entry Date"])
-            df = df[df["Entry Date Dt"] <= e_dt]
+            
+            if start:
+                s_dt = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
+                df = df[df["Entry Date Dt"] >= s_dt]
+            if end:
+                e_dt = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+                df = df[df["Entry Date Dt"] <= e_dt]
+            
+            # Remove the temporary column
+            df = df.drop(columns=["Entry Date Dt"])
         
         if "Entry Date Dt" in df.columns:
             df = df.drop(columns=["Entry Date Dt"])
@@ -1051,6 +1097,52 @@ def add_dividend(req: DividendRequest, account_id: int = 1):
         tx.symbol = req.symbol
         s.commit()
         return {"ok": True, "balance": _cash_balance(s, account_id)}
+
+@app.post("/trades/{trade_id}/dividend")
+def add_trade_dividend(trade_id: int, payload: DividendRequest, account_id: int = 1):
+    with session_scope() as s:
+        trade = s.get(Trade, trade_id)
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+        
+        at = payload.at or datetime.utcnow()
+        note = payload.note or f"Dividend for {trade.symbol}"
+        
+        if payload.is_stock_dividend:
+            # Stock dividend: increases size, lowers avg cost
+            old_val = trade.position_size * trade.entry_price
+            new_size = trade.position_size + payload.amount
+            if new_size > 0:
+                trade.entry_price = old_val / new_size
+                trade.position_size = new_size
+            
+            # Record a 0-amount transaction just for history tracking of the event
+            tx = _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=0,
+                tx_type=CashTxType.dividend,
+                at=at,
+                note=f"[Stock Dividend] {payload.amount} shares added. {note}"
+            )
+            tx.trade_id = trade_id
+            tx.symbol = trade.symbol
+        else:
+            # Cash dividend: positive inflow
+            tx = _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=payload.amount,
+                tx_type=CashTxType.dividend,
+                at=at,
+                note=note
+            )
+            tx.trade_id = trade_id
+            tx.symbol = trade.symbol
+        
+        s.commit()
+        return {"ok": True, "balance": _cash_balance(s, account_id)}
+@app.get("/cash/transactions", response_model=list[CashTxRead])
 def cash_transactions(account_id: int = 1, limit: int = 300, offset: int = 0) -> list[CashTxRead]:
     with session_scope() as s:
         rows = (
@@ -1361,15 +1453,6 @@ def _parse_market(v: str | None) -> Market:
     raise ValueError(f"Invalid market: {v}")
 
 
-def _parse_trade_type(v: str | None) -> TradeType:
-    if not v:
-        return TradeType.long
-    x = v.strip().lower()
-    if x in ["long", "buy"]:
-        return TradeType.long
-    if x in ["short", "sell"]:
-        return TradeType.short
-    raise ValueError(f"Invalid trade_type: {v}")
 
 
 def _parse_float(v: str | None) -> float | None:
@@ -1647,7 +1730,6 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     raise ValueError("symbol is required")
 
                 market = _parse_market(row.get("market"))
-                trade_type = _parse_trade_type(row.get("trade_type"))
 
                 entry_price = _parse_float(row.get("entry_price"))
                 if entry_price is None:
@@ -1661,7 +1743,6 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     account_id=account_id,
                     symbol=symbol,
                     market=market,
-                    trade_type=trade_type,
                     entry_price=entry_price,
                     exit_price=_parse_float(row.get("exit_price")),
                     stop_loss=_parse_float(row.get("stop_loss")),
@@ -1694,7 +1775,6 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                 "id",
                 "symbol",
                 "market",
-                "trade_type",
                 "entry_price",
                 "exit_price",
                 "stop_loss",
@@ -1727,8 +1807,7 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                         t.id,
                         t.symbol,
                         t.market.value,
-                        t.trade_type.value,
-                        t.entry_price,
+                        str(t.entry_price),
                         t.exit_price if t.exit_price is not None else "",
                         t.stop_loss if t.stop_loss is not None else "",
                         t.take_profit if t.take_profit is not None else "",
@@ -2111,19 +2190,6 @@ def insights(account_id: int = 1) -> dict:
                 "win_rate": (wins / count) if count else 0.0,
             }
 
-        longs = [t for t in closed if t.trade_type == TradeType.long]
-        shorts = [t for t in closed if t.trade_type == TradeType.short]
-        s_long = summarize(longs)
-        s_short = summarize(shorts)
-        if s_long["count"] >= 5 or s_short["count"] >= 5:
-            better = "Long" if s_long["avg"] >= s_short["avg"] else "Short"
-            insights_list.append(
-                {
-                    "title": f"You perform better in {better} trades",
-                    "severity": "info",
-                    "detail": f"Avg PnL — Long: {s_long['avg']:.2f} ({pct(s_long['win_rate'])}%), Short: {s_short['avg']:.2f} ({pct(s_short['win_rate'])}%).",
-                }
-            )
 
         # Strategy performance
         by_strategy: dict[str, list[float]] = {}

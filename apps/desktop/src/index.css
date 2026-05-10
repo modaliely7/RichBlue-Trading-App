@@ -223,25 +223,25 @@ body {
 }
 
 .brandMark {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #38bdf8, #0369a1);
-  box-shadow: 0 0 20px var(--accent-glow);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #0369a1);
+  box-shadow: 0 4px 12px var(--accent-glow);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 18px;
+  font-size: 16px;
   color: white;
   flex-shrink: 0;
 }
 
 .brandTitle {
   font-weight: 800;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text-strong);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 
 .brandSub {
@@ -279,6 +279,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  position: relative;
 }
 
 .navItem:hover {
@@ -288,10 +289,21 @@ body {
 }
 
 .navItem.active {
-  background: rgba(14, 165, 233, 0.12);
-  border-color: rgba(14, 165, 233, 0.25);
-  color: #38bdf8;
-  box-shadow: 0 0 12px rgba(14, 165, 233, 0.08);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.navItem.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 2px 0 10px var(--accent-glow);
 }
 
 .navItem.active .navIcon {
@@ -1348,4 +1360,22 @@ textarea:focus {
 
 .strategyOption:hover {
   background: var(--accent-dim) !important;
+}
+.tabContent {
+  width: 100%;
+}
+
+.animateSlideIn {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card.active {
+  background: var(--accent-dim);
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 15px var(--accent-glow);
 }

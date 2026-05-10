@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAccount } from '../components/AccountContext'
+import { type Account, type Strategy } from '../lib/api'
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -19,14 +20,18 @@ export function SettingsPage() {
   const qc = useQueryClient()
   const [message, setMessage] = useState<string>('')
   const [error, setError] = useState<string>('')
+  const [activeTab, setActiveTab] = useState<'accounts' | 'strategies' | 'data' | 'appearance'>('accounts')
+
+  const accountId = currentAccount?.id ?? 1
 
   // Strategies Management
-  const { data: strategies = [], refetch: refetchStrategies } = useQuery({
-    queryKey: ['strategies', currentAccount?.id],
-    queryFn: () => api.listStrategies(currentAccount?.id ?? 1)
+  const { data: strategies = [], refetch: refetchStrategies } = useQuery<Strategy[]>({
+    queryKey: ['strategies', accountId],
+    queryFn: () => api.listStrategies(accountId)
   })
   const [editingStId, setEditingStId] = useState<number | null>(null)
   const [editStName, setEditStName] = useState('')
+  const [editStColor, setEditStColor] = useState('')
 
   // Account Management State
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null)
@@ -52,380 +57,414 @@ export function SettingsPage() {
   }
 
   const backupMutation = useMutation({
-    mutationFn: () => api.backupDataset(currentAccount?.id ?? 1),
+    mutationFn: () => api.backupDataset(accountId),
     onSuccess: (blob) => {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-      downloadBlob(blob, `trading-backup-${stamp}.json`)
+      downloadBlob(blob, `richblue-backup-${stamp}.json`)
       setError('')
       setMessage('Backup downloaded successfully.')
     },
-    onError: (e) => {
-      setMessage('')
-      setError(e instanceof Error ? e.message : 'Backup failed')
-    },
+    onError: (e) => { setError(e instanceof Error ? e.message : 'Backup failed') },
   })
 
   const clearMutation = useMutation({
-    mutationFn: () => api.clearDataset(currentAccount?.id ?? 1),
+    mutationFn: () => api.clearDataset(accountId),
     onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['assets', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['psychology', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['psychologySummary', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['lessons', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['insights', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['trades', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['performanceAnalytics', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
-      ])
+      await qc.invalidateQueries()
       setError('')
       setMessage('Dataset cleared successfully.')
     },
-    onError: (e) => {
-      setMessage('')
-      setError(e instanceof Error ? e.message : 'Clear dataset failed')
-    },
+    onError: (e) => { setError(e instanceof Error ? e.message : 'Clear failed') },
   })
 
   const restoreMutation = useMutation({
-    mutationFn: (file: File) => api.restoreDataset(file, currentAccount?.id ?? 1),
+    mutationFn: (file: File) => api.restoreDataset(file, accountId),
     onSuccess: async (res) => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['assets', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['psychology', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['psychologySummary', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['lessons', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['insights', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['trades', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['performanceAnalytics', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['cashBalance', currentAccount?.id] }),
-        qc.invalidateQueries({ queryKey: ['cashTransactions', currentAccount?.id] }),
-      ])
+      await qc.invalidateQueries()
       setError('')
       setMessage(`Restore successful. ${res.trades} trades imported.`)
     },
-    onError: (e) => {
-      setMessage('')
-      setError(e instanceof Error ? e.message : 'Restore failed')
-    },
+    onError: (e) => { setError(e instanceof Error ? e.message : 'Restore failed') },
   })
 
-  const isBusy = backupMutation.isPending || clearMutation.isPending || restoreMutation.isPending
+  const updateStrategyMutation = useMutation({
+    mutationFn: (payload: { id: number; name: string; color: string }) => api.updateStrategy(payload.id, { name: payload.name, color: payload.color }),
+    onSuccess: () => {
+      refetchStrategies()
+      setEditingStId(null)
+      qc.invalidateQueries({ queryKey: ['overview'] })
+    }
+  })
+
+  const deleteStrategyMutation = useMutation({
+    mutationFn: api.deleteStrategy,
+    onSuccess: () => {
+      refetchStrategies()
+      qc.invalidateQueries({ queryKey: ['overview'] })
+    }
+  })
+
+  const createAccountMutation = useMutation({
+    mutationFn: (name: string) => apiFetch<Account>('/accounts', { method: 'POST', body: JSON.stringify({ name }) }),
+    onSuccess: () => {
+      refreshAccounts()
+      setIsAddingAccount(false)
+      setNewName('')
+    }
+  })
+
+  const updateAccountMutation = useMutation({
+    mutationFn: (payload: { id: number; name: string }) => apiFetch<Account>(`/accounts/${payload.id}`, { method: 'PATCH', body: JSON.stringify({ name: payload.name }) }),
+    onSuccess: () => {
+      refreshAccounts()
+      setEditingAccountId(null)
+    }
+  })
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (id: number) => apiFetch<{ deleted: boolean }>(`/accounts/${id}`, { method: 'DELETE' }),
+    onSuccess: () => refreshAccounts()
+  })
+
+  const TABS = [
+    { id: 'accounts', label: 'Accounts', icon: '👤', desc: 'Manage your profiles' },
+    { id: 'strategies', label: 'Strategies', icon: '🎯', desc: 'Define your edge' },
+    { id: 'data', label: 'Data', icon: '💾', desc: 'Backup & Restore' },
+    { id: 'appearance', label: 'Appearance', icon: '✨', desc: 'Customize your UI' }
+  ] as const
 
   return (
-    <div className="page">
-      <div className="pageHeader">
+    <div className="page" style={{ maxWidth: 1100, margin: '0 auto' }}>
+      <div className="pageHeader" style={{ padding: '30px 0', borderBottom: '1px solid var(--border)', marginBottom: 30 }}>
         <div>
-          <div className="pageTitle">Settings</div>
-          <div className="pageSubtitle">Manage accounts, backup, and maintenance actions.</div>
+          <div className="pageTitle" style={{ fontSize: 32, letterSpacing: '-0.5px' }}>Settings</div>
+          <div className="pageSubtitle" style={{ fontSize: 16 }}>Configure your trading environment and preferences.</div>
         </div>
       </div>
 
-      <div className="card panel" style={{ marginBottom: 16 }}>
-        <div className="panelTitle">Account management</div>
-        <div className="tableWrap" style={{ marginTop: 10 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map(acc => {
-                const isEditing = editingAccountId === acc.id
-                return (
-                  <tr key={acc.id}>
-                    <td>
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={e => setEditName(e.target.value)}
-                          style={{ padding: 4, width: '100%' }}
-                        />
-                      ) : (
-                        acc.name
-                      )}
-                    </td>
-                    <td>
-                      <div className="detailsActions" style={{ marginTop: 0 }}>
-                        {isEditing ? (
-                          <>
-                            <button
-                              className="btn btnGhost"
-                              onClick={async () => {
-                                try {
-                                  await api.updateAccount(acc.id, { name: editName })
-                                  await refreshAccounts()
-                                  setEditingAccountId(null)
-                                  setMessage('Account updated.')
-                                } catch (e) {
-                                  setError(e instanceof Error ? e.message : 'Update failed')
-                                }
-                              }}
-                            >
-                              Save
-                            </button>
-                            <button className="btn btnGhost" onClick={() => setEditingAccountId(null)}>Cancel</button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              className="btn btnGhost"
-                              onClick={() => {
-                                setEditingAccountId(acc.id)
-                                setEditName(acc.name)
-                              }}
-                            >
-                              Edit
-                            </button>
-                            {acc.id !== mainAccountId && (
-                              <button
-                                className="btn btnGhost"
-                                style={{ color: '#ef4444' }}
-                                onClick={async () => {
-                                const ok = window.confirm(`Delete account "${acc.name}"? This deletes all its data!`)
-                                if (ok) {
-                                  try {
-                                    await api.deleteAccount(acc.id)
-                                    await refreshAccounts()
-                                    setMessage('Account deleted.')
-                                  } catch (e) {
-                                    setError(e instanceof Error ? e.message : 'Delete failed')
-                                  }
-                                }
-                              }}
-                            >
-                              Delete
-                            </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {isAddingAccount ? (
-                <tr>
-                  <td>
-                    <input
-                      type="text"
-                      placeholder="Account Name"
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      style={{ padding: 4, width: '100%' }}
-                    />
-                  </td>
-                  <td>
-                    <div className="detailsActions" style={{ marginTop: 0 }}>
-                      <button
-                        className="btn btnGhost"
-                        onClick={async () => {
-                          if (!newName.trim()) return
-                          try {
-                            await api.createAccount({ name: newName })
-                            await refreshAccounts()
-                            setIsAddingAccount(false)
-                            setNewName('')
-                            setMessage('Account created.')
-                          } catch (e) {
-                            setError(e instanceof Error ? e.message : 'Create failed')
-                          }
-                        }}
-                      >
-                        Save
-                      </button>
-                      <button className="btn btnGhost" onClick={() => setIsAddingAccount(false)}>Cancel</button>
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+      {(message || error) && (
+        <div style={{ marginBottom: 20, animation: 'slideIn 0.3s ease' }}>
+          {message && <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--accent2)', color: 'var(--text)', background: 'var(--accent2-glow)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 20 }}>✅</span> {message}
+          </div>}
+          {error && <div className="card" style={{ padding: 16, borderLeft: '4px solid var(--danger)', color: 'var(--text)', background: 'var(--danger-glow)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 20 }}>❌</span> {error}
+          </div>}
         </div>
-        {!isAddingAccount && accounts.length < 3 && (
-          <div style={{ marginTop: 12 }}>
-            <button className="btn btnGhost" onClick={() => setIsAddingAccount(true)}>+ Add Account</button>
-          </div>
-        )}
-      </div>
+      )}
 
-      <div className="card panel" style={{ marginBottom: 16 }}>
-        <div className="panelTitle">Strategy tags</div>
-        <div className="muted" style={{ marginBottom: 10 }}>Manage your trade strategies and tags.</div>
-        <div className="tableWrap" style={{ marginTop: 10 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Tag Name</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {strategies.map(st => {
-                const isEditing = editingStId === st.id
-                return (
-                  <tr key={st.id}>
-                    <td>
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editStName}
-                          onChange={e => setEditStName(e.target.value)}
-                          style={{ padding: 4, width: '100%' }}
-                        />
-                      ) : (
-                        <span className="statusPill" style={{ background: st.color || 'var(--accent-dim)', color: 'var(--text-strong)', border: 'none' }}>
-                          {st.name}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="detailsActions" style={{ marginTop: 0 }}>
-                        {isEditing ? (
-                          <>
-                            <button
-                              className="btn btnGhost"
-                              onClick={async () => {
-                                if (!editStName.trim()) return
-                                try {
-                                  await api.updateStrategy(st.id, { name: editStName })
-                                  await refetchStrategies()
-                                  await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
-                                  setEditingStId(null)
-                                  setMessage('Strategy updated.')
-                                } catch (e) {
-                                  setError(e instanceof Error ? e.message : 'Update failed')
-                                }
-                              }}
-                            >
-                              Save
-                            </button>
-                            <button className="btn btnGhost" onClick={() => setEditingStId(null)}>Cancel</button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              className="btn btnGhost"
-                              onClick={() => {
-                                setEditingStId(st.id)
-                                setEditStName(st.name)
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              className="btn btnGhost"
-                              style={{ color: '#ef4444' }}
-                              onClick={async () => {
-                                if (window.confirm(`Delete strategy "${st.name}"? This will remove it from all trades.`)) {
-                                  try {
-                                    await api.deleteStrategy(st.id)
-                                    await refetchStrategies()
-                                    await qc.invalidateQueries({ queryKey: ['overview', currentAccount?.id] })
-                                    setMessage('Strategy deleted.')
-                                  } catch (e) {
-                                    setError(e instanceof Error ? e.message : 'Delete failed')
-                                  }
-                                }
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {strategies.length === 0 && (
-                <tr><td colSpan={2} className="muted text-center">No strategies defined yet. Add them in the Trade Journal.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card panel" style={{ marginBottom: 16 }}>
-        <div className="panelTitle">Appearance & Themes</div>
-        <div className="muted" style={{ marginBottom: 16 }}>Personalize your workspace with a premium theme.</div>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
-          {[
-            { id: 'default', label: 'Default Dark', color: '#0ea5e9' },
-            { id: 'midnight', label: 'Midnight', color: '#8b5cf6' },
-            { id: 'emerald', label: 'Emerald', color: '#10b981' },
-            { id: 'ocean', label: 'Ocean', color: '#075985' },
-            { id: 'medred', label: 'MedRed (Retro)', color: '#ec4899' },
-            { id: 'light', label: 'Clean Light', color: '#3b82f6' },
-          ].map(t => (
-            <div 
-              key={t.id}
-              onClick={() => applyTheme(t.id)}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32, minHeight: 600 }}>
+        {/* Modern Sidebar */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {TABS.map(tab => (
+            <div
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
               style={{
-                padding: '16px',
-                borderRadius: '12px',
-                border: '2px solid',
-                borderColor: theme === t.id ? 'var(--accent)' : 'var(--border)',
-                background: theme === t.id ? 'var(--accent-dim)' : 'var(--panel)',
+                padding: '16px 20px',
+                borderRadius: 16,
                 cursor: 'pointer',
-                textAlign: 'center',
-                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                background: activeTab === tab.id ? 'var(--panel-light)' : 'transparent',
+                border: `1px solid ${activeTab === tab.id ? 'var(--border)' : 'transparent'}`,
+                boxShadow: activeTab === tab.id ? '0 4px 20px rgba(0,0,0,0.1)' : 'none',
+                transform: activeTab === tab.id ? 'scale(1.02)' : 'scale(1)',
               }}
             >
-              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: t.color, margin: '0 auto 8px', boxShadow: theme === t.id ? `0 0 10px ${t.color}` : 'none' }}></div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: theme === t.id ? 'var(--text-strong)' : 'var(--muted2)' }}>{t.label}</div>
+              <div style={{ 
+                fontSize: 24, 
+                width: 44, 
+                height: 44, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                background: activeTab === tab.id ? 'var(--bg)' : 'var(--panel)',
+                borderRadius: 12,
+                boxShadow: activeTab === tab.id ? 'inset 0 2px 4px rgba(0,0,0,0.05)' : 'none'
+              }}>
+                {tab.icon}
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 15, color: activeTab === tab.id ? 'var(--text-strong)' : 'var(--text)' }}>
+                  {tab.label}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                  {tab.desc}
+                </div>
+              </div>
             </div>
           ))}
         </div>
-      </div>
 
-      <div className="card panel">
-        <div className="panelTitle">Data management</div>
-        <div className="muted" style={{ marginBottom: 10 }}>
-          Download a full JSON backup before running destructive actions.
-        </div>
-        <div className="detailsActions">
-          <button className="btn" disabled={isBusy} onClick={() => backupMutation.mutate()}>
-            {backupMutation.isPending ? 'Preparing backup...' : 'Backup dataset'}
-          </button>
-          <label className="fileBtn" style={{ opacity: isBusy ? 0.4 : 1, pointerEvents: isBusy ? 'none' : 'auto' }}>
-            <input 
-              type="file" 
-              accept=".json" 
-              onChange={e => {
-                const f = e.target.files?.[0]
-                if (!f) return
-                const ok = window.confirm('This will wipe all existing data for this account and replace it with the backup. Continue?')
-                if (ok) restoreMutation.mutate(f)
-                e.target.value = ''
-              }} 
-            />
-            {restoreMutation.isPending ? 'Restoring...' : 'Restore from backup'}
-          </label>
-          <button
-            className="btn btnGhost"
-            disabled={isBusy}
-            onClick={() => {
-              const ok = window.confirm('Clear all trades, assets, lessons, psychology logs, and cash transactions?')
-              if (!ok) return
-              clearMutation.mutate()
-            }}
-          >
-            {clearMutation.isPending ? 'Clearing...' : 'Clear dataset'}
-          </button>
-        </div>
+        {/* Content Area */}
+        <div className="card" style={{ padding: 40, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: '0 8px 32px rgba(0,0,0,0.08)' }}>
+          {activeTab === 'accounts' && (
+            <div className="animateSlideIn">
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Account Management</h2>
+                <p className="muted" style={{ marginTop: 8 }}>Manage your portfolios. Max limit: 3 accounts.</p>
+              </div>
+              
+              <div style={{ display: 'grid', gap: 16 }}>
+                {accounts.map(acc => (
+                  <div key={acc.id} className="card" style={{ 
+                    padding: 24, 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 16,
+                    transition: 'border-color 0.2s',
+                  }}>
+                    {editingAccountId === acc.id ? (
+                      <div style={{ display: 'flex', gap: 12, flex: 1 }}>
+                        <input className="input" value={editName} onChange={e => setEditName(e.target.value)} autoFocus style={{ flex: 1, fontSize: 16 }} />
+                        <button className="btn" onClick={() => updateAccountMutation.mutate({ id: acc.id, name: editName })}>Save Changes</button>
+                        <button className="btn btnGhost" onClick={() => setEditingAccountId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 24, background: 'var(--accent-glow)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>
+                            {acc.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text-strong)' }}>{acc.name}</div>
+                            <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>Account #{acc.id} • {acc.id === mainAccountId ? 'Primary' : 'Secondary'}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <button className="btn btnGhost" onClick={() => { setEditingAccountId(acc.id); setEditName(acc.name); }}>Rename</button>
+                          {acc.id !== mainAccountId && (
+                            <button className="btn btnDanger" onClick={() => { if (confirm('Delete this account and all its trades?')) deleteAccountMutation.mutate(acc.id) }}>Delete</button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
 
-        {message ? <div className="good" style={{ marginTop: 10 }}>{message}</div> : null}
-        {error ? <div className="error">{error}</div> : null}
+                {isAddingAccount ? (
+                  <div className="card" style={{ padding: 24, background: 'var(--panel-light)', border: '2px dashed var(--accent)', borderRadius: 16 }}>
+                    <div className="label" style={{ marginBottom: 8, fontSize: 14 }}>New Account Name</div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g., Retirement Fund 2024" autoFocus style={{ flex: 1 }} />
+                      <button className="btn" onClick={() => createAccountMutation.mutate(newName)} disabled={!newName.trim()}>Create Account</button>
+                      <button className="btn btnGhost" onClick={() => setIsAddingAccount(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : accounts.length < 3 ? (
+                  <button className="btn" style={{ 
+                    padding: 24, 
+                    border: '2px dashed var(--border)', 
+                    background: 'transparent', 
+                    borderRadius: 16,
+                    color: 'var(--text)',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    transition: 'all 0.2s'
+                  }} 
+                  onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--accent)', e.currentTarget.style.color = 'var(--accent)')}
+                  onMouseOut={e => (e.currentTarget.style.borderColor = 'var(--border)', e.currentTarget.style.color = 'var(--text)')}
+                  onClick={() => setIsAddingAccount(true)}>
+                    <span>+</span> Add Another Account
+                  </button>
+                ) : (
+                  <div className="muted" style={{ textAlign: 'center', padding: 24, background: 'var(--bg)', borderRadius: 16 }}>Account limit reached (Max 3).</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'strategies' && (
+            <div className="animateSlideIn">
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Strategy Setup</h2>
+                <p className="muted" style={{ marginTop: 8 }}>Define the rules and setups that formulate your edge.</p>
+              </div>
+              
+              <div className="tableWrap" style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <table className="table" style={{ margin: 0 }}>
+                  <thead style={{ background: 'var(--bg)' }}>
+                    <tr>
+                      <th style={{ padding: '16px 20px', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</th>
+                      <th style={{ padding: '16px 20px', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Label Color</th>
+                      <th style={{ textAlign: 'right', padding: '16px 20px', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {strategies.map(s => (
+                      <tr key={s.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
+                        {editingStId === s.id ? (
+                          <>
+                            <td style={{ padding: '16px 20px' }}>
+                              <input className="input" value={editStName} onChange={e => setEditStName(e.target.value)} style={{ width: '100%' }} />
+                            </td>
+                            <td style={{ padding: '16px 20px' }}>
+                              <input type="color" value={editStColor} onChange={e => setEditStColor(e.target.value)} style={{ width: 44, height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8 }} />
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '16px 20px' }}>
+                              <button className="btn" style={{ marginRight: 8 }} onClick={() => updateStrategyMutation.mutate({ id: s.id, name: editStName, color: editStColor })}>Save</button>
+                              <button className="btn btnGhost" onClick={() => setEditingStId(null)}>Cancel</button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ fontWeight: 600, padding: '20px', fontSize: 15 }}>{s.name}</td>
+                            <td style={{ padding: '20px' }}>
+                              <div style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '4px 12px 4px 4px', 
+                                borderRadius: 20, 
+                                background: 'var(--bg)',
+                                border: '1px solid var(--border)'
+                              }}>
+                                <div style={{ width: 20, height: 20, borderRadius: 10, background: s.color || 'var(--accent)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }} />
+                                <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>{s.color || '#default'}</span>
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right', padding: '20px' }}>
+                              <button className="btn btnGhost" onClick={() => { setEditingStId(s.id); setEditStName(s.name); setEditStColor(s.color || '#3b82f6'); }}>Edit</button>
+                              <button className="btn btnDanger" onClick={() => { if (confirm('Delete this strategy? Trades using it will be untagged.')) deleteStrategyMutation.mutate(s.id) }} style={{ marginLeft: 8 }}>Remove</button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                    {strategies.length === 0 && (
+                      <tr>
+                        <td colSpan={3} style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>
+                          No strategies defined yet. Create them when adding trades.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'data' && (
+            <div className="animateSlideIn">
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Data Management</h2>
+                <p className="muted" style={{ marginTop: 8 }}>Export, restore, or securely wipe your financial data.</p>
+              </div>
+              
+              <div className="grid2" style={{ gap: 24 }}>
+                <div className="card panel" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>📦</div>
+                  <div className="panelTitle" style={{ fontSize: 18, marginBottom: 8 }}>Backup & Export</div>
+                  <p className="muted" style={{ fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+                    Securely download your entire journal, including trades, transactions, and strategies as a JSON file.
+                  </p>
+                  <button className="btn" style={{ width: '100%', padding: 14 }} onClick={() => backupMutation.mutate()}>
+                    {backupMutation.isPending ? 'Generating...' : 'Download Backup'}
+                  </button>
+                </div>
+
+                <div className="card panel" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 24 }}>
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>☁️</div>
+                  <div className="panelTitle" style={{ fontSize: 18, marginBottom: 8 }}>Restore Data</div>
+                  <p className="muted" style={{ fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
+                    Upload a previously exported backup file to restore your entire trading history instantly.
+                  </p>
+                  <label className="btn btnGhost" style={{ display: 'block', textAlign: 'center', padding: 14, cursor: 'pointer', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+                    <input type="file" accept=".json" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) restoreMutation.mutate(e.target.files[0]) }} />
+                    {restoreMutation.isPending ? 'Restoring...' : 'Upload & Restore'}
+                  </label>
+                </div>
+
+                <div className="card panel span2" style={{ background: 'var(--danger-glow)', border: '1px solid var(--danger)', borderRadius: 16, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                  <div>
+                    <div className="panelTitle" style={{ color: 'var(--danger)', fontSize: 18, marginBottom: 4 }}>Danger Zone: Wipe Data</div>
+                    <p style={{ color: 'var(--danger)', opacity: 0.8, fontSize: 14, margin: 0 }}>Permanently delete all trades and transactions. This action cannot be undone.</p>
+                  </div>
+                  <button className="btn btnDanger" style={{ padding: '12px 24px', fontWeight: 600 }} onClick={() => { if (confirm('CRITICAL: This will delete ALL trades in this account. Continue?')) clearMutation.mutate() }}>
+                    {clearMutation.isPending ? 'Clearing...' : 'Wipe All Data'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'appearance' && (
+            <div className="animateSlideIn">
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Interface Theme</h2>
+                <p className="muted" style={{ marginTop: 8 }}>Choose the visual style that best fits your workflow.</p>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 20 }}>
+                {[
+                  { id: 'default', label: 'Default Dark', bg: '#060b17', accent: '#3b82f6' },
+                  { id: 'midnight', label: 'Midnight Blue', bg: '#030712', accent: '#818cf8' },
+                  { id: 'ocean', label: 'Deep Ocean', bg: '#0c4a6e', accent: '#38bdf8' },
+                  { id: 'emerald', label: 'Emerald City', bg: '#022c22', accent: '#34d399' },
+                  { id: 'light', label: 'Clean Light', bg: '#f8fafc', accent: '#2563eb' },
+                  { id: 'medred', label: 'Retrowave', bg: '#2b1a3d', accent: '#f43f5e' }
+                ].map(t => (
+                  <div
+                    key={t.id}
+                    onClick={() => applyTheme(t.id)}
+                    className="themeCard"
+                    style={{
+                      background: 'var(--bg)',
+                      padding: 16,
+                      borderRadius: 16,
+                      cursor: 'pointer',
+                      border: `2px solid ${theme === t.id ? 'var(--accent)' : 'var(--border)'}`,
+                      transition: 'all 0.2s',
+                      transform: theme === t.id ? 'translateY(-2px)' : 'none',
+                      boxShadow: theme === t.id ? '0 8px 24px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    <div style={{ 
+                      width: '100%', 
+                      height: 80, 
+                      background: t.bg, 
+                      borderRadius: 12, 
+                      marginBottom: 16, 
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: `linear-gradient(to top, ${t.accent}20, transparent)` }} />
+                      <div style={{ position: 'absolute', bottom: 12, left: 12, width: 24, height: 24, borderRadius: 12, background: t.accent, border: '2px solid rgba(255,255,255,0.2)' }} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: theme === t.id ? 'var(--text-strong)' : 'var(--text)' }}>{t.label}</div>
+                      {theme === t.id && <div style={{ color: 'var(--accent)' }}>✓</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(`http://127.0.0.1:8001${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Network error' }))
+    throw new Error(err.detail || 'API error')
+  }
+  return res.json()
+}
