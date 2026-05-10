@@ -20,7 +20,7 @@ export function SettingsPage() {
   const qc = useQueryClient()
   const [message, setMessage] = useState<string>('')
   const [error, setError] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'accounts' | 'strategies' | 'data' | 'appearance'>('accounts')
+  const [activeTab, setActiveTab] = useState<'accounts' | 'strategies' | 'data' | 'appearance' | 'display'>('accounts')
 
   const accountId = currentAccount?.id ?? 1
 
@@ -54,6 +54,16 @@ export function SettingsPage() {
     } else {
       document.documentElement.setAttribute('data-theme', t)
     }
+  }
+
+  const [zoom, setZoom] = useState(() => {
+    return localStorage.getItem('ui-zoom') || '100'
+  })
+
+  const applyZoom = (z: string) => {
+    setZoom(z)
+    localStorage.setItem('ui-zoom', z)
+    document.documentElement.style.setProperty('--ui-zoom', `${z}%`)
   }
 
   const backupMutation = useMutation({
@@ -130,7 +140,8 @@ export function SettingsPage() {
     { id: 'accounts', label: 'Accounts', icon: '👤', desc: 'Manage your profiles' },
     { id: 'strategies', label: 'Strategies', icon: '🎯', desc: 'Define your edge' },
     { id: 'data', label: 'Data', icon: '💾', desc: 'Backup & Restore' },
-    { id: 'appearance', label: 'Appearance', icon: '✨', desc: 'Customize your UI' }
+    { id: 'appearance', label: 'Theme', icon: '✨', desc: 'Colors & Icons' },
+    { id: 'display', label: 'Display', icon: '🔍', desc: 'Font & Zoom' }
   ] as const
 
   return (
@@ -448,6 +459,49 @@ export function SettingsPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'display' && (
+            <div className="animateSlideIn">
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Display & Scaling</h2>
+                <p className="muted" style={{ marginTop: 8 }}>Adjust the interface size to fit your screen perfectly.</p>
+              </div>
+
+              <div className="card panel" style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 16, padding: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>UI Scaling (Zoom)</div>
+                    <p className="muted" style={{ fontSize: 14, margin: 0 }}>Current Scale: {zoom}%</p>
+                  </div>
+                  <div style={{ fontSize: 32 }}>🔍</div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                  <button className="btn btnGhost" onClick={() => applyZoom(String(Math.max(70, Number(zoom) - 5)))}>A-</button>
+                  <input 
+                    type="range" 
+                    min="70" 
+                    max="150" 
+                    step="5" 
+                    value={zoom} 
+                    onChange={e => applyZoom(e.target.value)} 
+                    style={{ flex: 1, accentColor: 'var(--accent)' }}
+                  />
+                  <button className="btn btnGhost" onClick={() => applyZoom(String(Math.min(150, Number(zoom) + 5)))}>A+</button>
+                </div>
+                
+                <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                  <button className="btn" style={{ flex: 1 }} onClick={() => applyZoom('100')}>Reset to Default (100%)</button>
+                </div>
+
+                <div style={{ marginTop: 32, padding: 16, background: 'var(--panel-light)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--muted2)', lineHeight: 1.5 }}>
+                    <b>Tip:</b> If the text is too big or too small, adjust this slider. Changes are applied instantly and saved to your profile.
+                  </p>
+                </div>
               </div>
             </div>
           )}

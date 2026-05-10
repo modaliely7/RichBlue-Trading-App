@@ -14,7 +14,8 @@
 ### 2. Electron + Vite Production Build
 - **Base Path**: Always keep `base: './'` in `apps/desktop/vite.config.ts`.
 - **Routing**: Always use `HashRouter` instead of `BrowserRouter` in `apps/desktop/src/main.tsx`.
-- **Reason**: The `file://` protocol used in production does not support the HTML5 History API or absolute asset paths.
+- **UI Scaling**: Use the `--ui-zoom` CSS variable for global scaling. Apply it to the `html` element.
+- **Input Interaction**: Ensure `input`, `select`, and `textarea` have `pointer-events: auto` and `user-select: text` to prevent the Electron window from blocking interactions.
 
 ### 3. Backend Dependencies (PyInstaller)
 - If you add new Python packages, you **must** update the `requirements.txt` and ensure they are compatible with PyInstaller.

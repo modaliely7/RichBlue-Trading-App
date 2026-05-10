@@ -30,9 +30,17 @@
   --radius-sm: 8px;
   --radius-lg: 20px;
   color-scheme: dark;
-  font: 14px/1.6 var(--sans);
+  font: var(--ui-zoom, 100%) var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+}
+
+input, select, textarea {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 :root[data-theme="medred"] {

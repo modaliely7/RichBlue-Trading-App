@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { DashboardPage } from './pages/DashboardPage'
@@ -17,6 +18,18 @@ import { AddTradePage } from './pages/AddTradePage'
 import { DataPage } from './pages/DataPage'
 
 export default function App() {
+  useEffect(() => {
+    // Apply Theme
+    const savedTheme = localStorage.getItem('theme') || 'default'
+    if (savedTheme !== 'default') {
+      document.documentElement.setAttribute('data-theme', savedTheme)
+    }
+    
+    // Apply Zoom
+    const savedZoom = localStorage.getItem('ui-zoom') || '100'
+    document.documentElement.style.setProperty('--ui-zoom', `${savedZoom}%`)
+  }, [])
+
   return (
     <div className="appShell">
       <Sidebar />
