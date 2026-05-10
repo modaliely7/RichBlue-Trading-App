@@ -63,7 +63,7 @@ def portfolio_value_with_unrealized(trades: Sequence[Trade], txs: Sequence[CashT
     cash = net_deposited + realized_pnl - open_cost_basis
     """
     net_dep = net_deposited_through(txs, as_of_day)
-    realized = realized_pnl_cumulative_through(trades, as_of_day)
+    realized = realized_pnl_cumulative_through(trades, txs, as_of_day)
     cost_basis = open_stocks_cost_basis_for_day(trades, as_of_day)
     
     cash = net_dep + realized - cost_basis
@@ -72,11 +72,13 @@ def portfolio_value_with_unrealized(trades: Sequence[Trade], txs: Sequence[CashT
     return float(cash + mv)
 
 
-def realized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date) -> float:
+def realized_pnl_cumulative_through(trades: Sequence[Trade], txs: Sequence[CashTransaction], as_of_day: date) -> float:
     """Sum of closed-trade PnL for exits on or before ``as_of_day`` (calendar date).
-    Robust to missing exit_date by falling back to entry_date.
+    ALSO includes Dividends and Adjustments from cash transactions.
     """
     total = 0.0
+    
+    # 1. Closed Trades PnL
     for t in trades:
         if t.exit_price is None:
             continue
@@ -87,6 +89,13 @@ def realized_pnl_cumulative_through(trades: Sequence[Trade], as_of_day: date) ->
         xd = dt.date() if hasattr(dt, "date") else dt
         if xd <= as_of_day:
             total += float(pnl)
+            
+    # 2. Dividends and Adjustments
+    for tx in txs:
+        if tx.tx_type in {CashTxType.dividend, CashTxType.adjustment}:
+            if tx_calendar_day(tx.at) <= as_of_day:
+                total += float(tx.amount or 0.0)
+                
     return float(total)
 
 

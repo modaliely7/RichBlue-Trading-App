@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .models import Trade, TradeType
+from .models import Trade
 
 
 def calc_pnl(trade: Trade) -> float | None:
     if trade.exit_price is None:
         return None
-    direction = 1.0 if trade.trade_type == TradeType.long else -1.0
-    gross = (trade.exit_price - trade.entry_price) * direction * trade.position_size
+    gross = (trade.exit_price - trade.entry_price) * trade.position_size
     entry_fees = float(trade.fees or 0.0)
     exit_fees = float(getattr(trade, "exit_fees", 0.0) or 0.0)
     return gross - entry_fees - exit_fees
@@ -42,4 +41,52 @@ def calc_duration_seconds(entry_date: datetime, exit_date: datetime | None) -> i
     if exit_date is None:
         return None
     return max(0, int((exit_date - entry_date).total_seconds()))
+
+
+def calc_advanced_metrics(trades: list[Trade]) -> dict:
+    closed = [t for t in trades if t.exit_price is not None]
+    if not closed:
+        return {}
+
+    pnls = [calc_pnl(t) or 0.0 for t in closed]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+
+    win_count = len(wins)
+    loss_count = len(losses)
+    total_count = len(closed)
+
+    win_rate = (win_count / total_count) * 100 if total_count > 0 else 0
+    avg_win = sum(wins) / win_count if win_count > 0 else 0
+    max_win = max(wins) if wins else 0
+    avg_loss = abs(sum(losses) / loss_count) if loss_count > 0 else 0
+    max_loss = abs(min(losses)) if losses else 0
+
+    gross_win = sum(wins)
+    gross_loss = abs(sum(losses))
+    profit_factor = gross_win / gross_loss if gross_loss > 0 else (Infinity if gross_win > 0 else 0)
+
+    # Risk Reward
+    rrs = [calc_risk_reward(t) for t in closed if calc_risk_reward(t) is not None]
+    avg_rr = sum(rrs) / len(rrs) if rrs else 0
+    max_rr = max(rrs) if rrs else 0
+
+    return {
+        "win_rate": win_rate,
+        "avg_win_amount": avg_win,
+        "max_win_amount": max_win,
+        "avg_loss_amount": avg_loss,
+        "max_loss_amount": max_loss,
+        "avg_risk_reward": avg_rr,
+        "max_risk_reward": max_rr,
+        "profit_factor": profit_factor,
+        "gross_win": gross_win,
+        "gross_loss": gross_loss,
+        "closed_count": total_count,
+        "win_count": win_count,
+        "loss_count": loss_count,
+    }
+
+
+Infinity = float('inf')
 

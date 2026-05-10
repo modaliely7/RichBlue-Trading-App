@@ -1,4 +1,5 @@
-export function formatCurrency(n: number, currency = 'USD') {
+export function formatCurrency(n: number | null | undefined, currency = 'USD') {
+  if (n == null || !Number.isFinite(n)) return '—'
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency,
@@ -6,7 +7,8 @@ export function formatCurrency(n: number, currency = 'USD') {
   }).format(n)
 }
 
-export function formatPct(n: number) {
+export function formatPct(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return '—'
   return `${n.toFixed(2)}%`
 }
 

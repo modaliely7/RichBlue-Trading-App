@@ -169,7 +169,6 @@ export function CalendarPage() {
                     <thead>
                       <tr>
                         <th>Symbol</th>
-                        <th>Type</th>
                         <th>PnL</th>
                       </tr>
                     </thead>
@@ -177,7 +176,6 @@ export function CalendarPage() {
                       {selected.trades.map((t) => (
                         <tr key={t.id}>
                           <td className="mono" style={{ color: 'var(--accent)' }}>{t.symbol}</td>
-                          <td style={{ fontSize: 11 }}>{t.trade_type}</td>
                           <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'} style={{ fontWeight: 700 }}>
                             {t.pnl == null ? '—' : formatCurrency(t.pnl)}
                           </td>

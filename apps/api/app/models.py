@@ -3,8 +3,8 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, Table, Column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 
 class Base(DeclarativeBase):
@@ -17,10 +17,6 @@ class Market(str, enum.Enum):
     crypto = "Crypto"
     forex = "Forex"
 
-
-class TradeType(str, enum.Enum):
-    long = "Long"
-    short = "Short"
 
 
 class AccountType(str, enum.Enum):
@@ -38,6 +34,23 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class Strategy(Base):
+    __tablename__ = "strategies"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
+    name: Mapped[str] = mapped_column(String(64), index=True)
+    color: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+trade_strategy_table = Table(
+    "trade_strategy",
+    Base.metadata,
+    Column("trade_id", Integer, ForeignKey("trades.id", ondelete="CASCADE"), primary_key=True),
+    Column("strategy_id", Integer, ForeignKey("strategies.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class Trade(Base):
     __tablename__ = "trades"
 
@@ -46,7 +59,6 @@ class Trade(Base):
 
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     market: Mapped[Market] = mapped_column(Enum(Market), default=Market.stocks, index=True)
-    trade_type: Mapped[TradeType] = mapped_column(Enum(TradeType), default=TradeType.long, index=True)
 
     entry_price: Mapped[float] = mapped_column(Float)
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -56,6 +68,17 @@ class Trade(Base):
 
     strategy_used: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     indicators_used: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    strategies: Mapped[list[Strategy]] = relationship(
+        "Strategy",
+        secondary=trade_strategy_table,
+    )
+
+    @validates("symbol")
+    def validate_symbol(self, key, value):
+        if value:
+            return value.strip().upper()
+        return value
 
     entry_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     exit_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -148,6 +171,9 @@ class StockMetrics(Base):
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     provider: Mapped[str] = mapped_column(String(64), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+
+    company_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    quote_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Core fundamentals
     current_price: Mapped[float] = mapped_column(Float, default=0.0)
@@ -251,6 +277,7 @@ class CashTxType(str, enum.Enum):
     trade_buy = "Trade Buy"
     trade_sell = "Trade Sell"
     fee = "Fee"
+    dividend = "Dividend"
     adjustment = "Adjustment"
 
 

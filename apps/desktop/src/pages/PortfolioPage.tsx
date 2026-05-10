@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pie, Line } from 'react-chartjs-2'
+import { Pie, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api } from '../lib/api'
 import type { HoldingRow } from '../lib/api'
@@ -23,11 +23,40 @@ export function PortfolioPage() {
   const { currentAccount } = useAccount()
   const [method, setMethod] = useState<string>('realized')
   const [pnlPeriod, setPnlPeriod] = useState<string>('ALL')
+  const [customStart, setCustomStart] = useState<string>('')
+  const [customEnd, setCustomEnd] = useState<string>('')
   
   const { data: ov, isLoading, error } = useQuery({ 
     queryKey: ['overview', currentAccount?.id, method], 
     queryFn: () => api.overview(currentAccount?.id ?? 1, method) 
   })
+
+  const [dividendSymbol, setDividendSymbol] = useState<string | null>(null)
+  const [dividendAmount, setDividendAmount] = useState<string>('')
+  const [isSubmittingDiv, setIsSubmittingDiv] = useState(false)
+
+  const addDividend = async () => {
+    if (!dividendSymbol || !dividendAmount || isSubmittingDiv) return
+    const amount = parseFloat(dividendAmount)
+    if (isNaN(amount) || amount <= 0) return
+
+    setIsSubmittingDiv(true)
+    try {
+      await api.recordDividend({
+        account_id: currentAccount?.id ?? 1,
+        symbol: dividendSymbol,
+        amount: amount,
+      })
+      setDividendSymbol(null)
+      setDividendAmount('')
+      // Refresh data
+      window.location.reload() 
+    } catch (e) {
+      alert('Failed to record dividend')
+    } finally {
+      setIsSubmittingDiv(false)
+    }
+  }
 
   const holdings = useMemo(() => ov?.holdings ?? [], [ov])
   const openHoldings = useMemo(
@@ -87,6 +116,18 @@ export function PortfolioPage() {
     return { labels, values, pct, total, bg, border }
   }, [metrics.cash, openHoldings, method, ov?.fund_allocation])
 
+  // Earnings breakdown by asset class (Stocks vs Funds)
+  const earningsPie = useMemo(() => {
+    const ea = ov?.earnings_allocation ?? {}
+    const labels = Object.keys(ea)
+    const values = Object.values(ea) as number[]
+    if (!labels.length) return null
+    const colors = ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4']
+    const bg = colors.slice(0, labels.length)
+    const border = ['#0ea5e9', '#059669', '#d97706', '#7c3aed', '#e11d48', '#0891b2'].slice(0, labels.length)
+    return { labels, values, bg, border }
+  }, [ov?.earnings_allocation])
+
   const earningsChart = useMemo(() => {
     if (!ov?.chart) return null
     const labels = ov.chart.labels
@@ -95,19 +136,25 @@ export function PortfolioPage() {
     
     if (pnlPeriod === 'ALL' || !labels.length) return { labels, values }
     
-    const now = new Date()
-    let start = new Date()
-    if (pnlPeriod === '1M') start.setMonth(now.getMonth() - 1)
-    else if (pnlPeriod === '6M') start.setMonth(now.getMonth() - 6)
-    else if (pnlPeriod === '1Y') start.setFullYear(now.getFullYear() - 1)
-    else if (pnlPeriod === 'YTD') start = new Date(now.getFullYear(), 0, 1)
+    let indices: number[] = []
+    if (pnlPeriod === 'CUSTOM' && customStart && customEnd) {
+      indices = labels.map((l, i) => (l >= customStart && l <= customEnd ? i : -1)).filter(i => i !== -1)
+    } else {
+      const now = new Date()
+      let start = new Date()
+      if (pnlPeriod === '1M') start.setMonth(now.getMonth() - 1)
+      else if (pnlPeriod === '6M') start.setMonth(now.getMonth() - 6)
+      else if (pnlPeriod === '1Y') start.setFullYear(now.getFullYear() - 1)
+      else if (pnlPeriod === 'YTD') start = new Date(now.getFullYear(), 0, 1)
+      
+      indices = labels.map((l, i) => (new Date(l) >= start ? i : -1)).filter(i => i !== -1)
+    }
     
-    const indices = labels.map((l, i) => (new Date(l) >= start ? i : -1)).filter(i => i !== -1)
     return {
       labels: indices.map(i => labels[i]),
       values: indices.map(i => values[i])
     }
-  }, [ov?.chart, pnlPeriod, method])
+  }, [ov?.chart, pnlPeriod, method, customStart, customEnd])
 
   return (
     <div className="page">
@@ -171,6 +218,7 @@ export function PortfolioPage() {
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 12, marginTop: 12 }}>
+        {/* Portfolio Mix Pie */}
         <div className="card panel">
           <div className="panelTitle">Portfolio mix (pie)</div>
           <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
@@ -216,13 +264,72 @@ export function PortfolioPage() {
           )}
         </div>
 
+        {/* Earnings by Asset Class (Stocks vs Funds) — Doughnut */}
         <div className="card panel">
+          <div className="panelTitle">Earnings by Asset Class</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+            Realized P/L split across Stocks and Funds{method === 'liquidation' ? ' (inc. unrealized)' : ''}.
+          </div>
+          {!earningsPie ? (
+            <div className="muted" style={{ marginTop: 16 }}>No closed trades yet — earnings will appear here.</div>
+          ) : (
+            <>
+              <div style={{ position: 'relative', height: 240, marginTop: 16 }}>
+                <Doughnut
+                  data={{
+                    labels: earningsPie.labels,
+                    datasets: [{
+                      data: earningsPie.values,
+                      backgroundColor: earningsPie.bg,
+                      borderColor: earningsPie.border,
+                      borderWidth: 2,
+                    }],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                      legend: { position: 'bottom', labels: { color: 'rgba(148,163,184,0.95)', font: { size: 12 }, padding: 16, usePointStyle: true } },
+                      tooltip: {
+                        callbacks: {
+                          label: (ctx) => {
+                            const v = Number(ctx.raw ?? 0)
+                            const sign = v >= 0 ? '+' : ''
+                            return `${ctx.label}: ${sign}${formatCurrency(v)}`
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                {earningsPie.labels.map((lbl, i) => {
+                  const val = earningsPie.values[i]
+                  return (
+                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: earningsPie.bg[i] }} />
+                        <span style={{ color: 'var(--text)' }}>{lbl}</span>
+                      </span>
+                      <span className={`mono ${val >= 0 ? 'good' : 'bad'}`}>{val >= 0 ? '+' : ''}{formatCurrency(val)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Portfolio Earnings — Cumulative Line Chart */}
+        <div className="card panel" style={{ gridColumn: '1 / -1' }}>
           <div className="panelHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="panelTitle">Portfolio Earnings</div>
-            <div className="periodSelect">
-              {['1M', '6M', '1Y', 'YTD', 'ALL'].map(p => (
-                <button 
-                  key={p} 
+            <div className="panelTitle">Portfolio Earnings (Cumulative)</div>
+            <div className="periodSelect" style={{ display: 'flex', alignItems: 'center' }}>
+              {['1M', '6M', '1Y', 'YTD', 'ALL', 'CUSTOM'].map(p => (
+                <button
+                  key={p}
                   className={`btn-small ${pnlPeriod === p ? 'active' : ''}`}
                   onClick={() => setPnlPeriod(p)}
                   style={{ marginLeft: 4, padding: '2px 8px', fontSize: 11 }}
@@ -230,6 +337,12 @@ export function PortfolioPage() {
                   {p}
                 </button>
               ))}
+              {pnlPeriod === 'CUSTOM' && (
+                <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                  <input type="date" className="miniInput" style={{ padding: '2px 4px', fontSize: 11 }} value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                  <input type="date" className="miniInput" style={{ padding: '2px 4px', fontSize: 11 }} value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                </div>
+              )}
             </div>
           </div>
           <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
@@ -257,7 +370,7 @@ export function PortfolioPage() {
                   maintainAspectRatio: false,
                   scales: {
                     x: { display: false },
-                    y: { 
+                    y: {
                       grid: { color: 'rgba(255,255,255,0.05)' },
                       ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }
                     }
@@ -277,6 +390,7 @@ export function PortfolioPage() {
         </div>
       </div>
 
+
       {metrics.mismatch && method === 'realized' ? (
         <div className="error" style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
           Pie total {formatCurrency(metrics.realizedFromLedger)} ≠ realized portfolio value {formatCurrency(metrics.realizedFromPnL)}. Check fund positions.
@@ -294,8 +408,9 @@ export function PortfolioPage() {
               <tr>
                 <th>Symbol</th>
                 <th>Open Qty</th>
-                <th>Avg open cost (reference price)</th>
+                <th>Avg buying price</th>
                 <th>Open cost basis</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -305,6 +420,32 @@ export function PortfolioPage() {
                   <td className="mono">{h.open_quantity}</td>
                   <td className="mono">{h.avg_open_cost == null ? '—' : h.avg_open_cost.toFixed(4)}</td>
                   <td className="mono">{formatCurrency(h.open_cost_basis)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {dividendSymbol === h.symbol ? (
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <input
+                          className="miniInput"
+                          style={{ width: 80 }}
+                          type="number"
+                          placeholder="Amount"
+                          value={dividendAmount}
+                          onChange={(e) => setDividendAmount(e.target.value)}
+                          autoFocus
+                        />
+                        <button className="btn btnGhost" onClick={addDividend} disabled={isSubmittingDiv}>
+                          {isSubmittingDiv ? '...' : 'Add'}
+                        </button>
+                        <button className="btn btnGhost" onClick={() => setDividendSymbol(null)}>×</button>
+                      </div>
+                    ) : (
+                      <button className="btn btnGhost" onClick={() => {
+                        setDividendSymbol(h.symbol)
+                        setDividendAmount('')
+                      }}>
+                        + Dividend
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {openHoldings.length === 0 ? (

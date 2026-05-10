@@ -6,13 +6,15 @@ import { CalendarPage } from './pages/CalendarPage'
 import { SymbolsPage } from './pages/SymbolsPage'
 import { PortfolioPage } from './pages/PortfolioPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
-import { AiCoachPage } from './pages/AiCoachPage'
-import { RiskPage } from './pages/RiskPage'
+import { CalculatorsPage } from './pages/CalculatorsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { StockFundamentalsPage } from './pages/StockFundamentalsPage'
 import { TechnicalAnalysisPage } from './pages/TechnicalAnalysisPage'
 import { SmartMoneyPage } from './pages/SmartMoneyPage'
 import { CashPage } from './pages/CashPage'
+import { StrategiesPage } from './pages/StrategiesPage'
+import { AddTradePage } from './pages/AddTradePage'
+import { DataPage } from './pages/DataPage'
 
 export default function App() {
   return (
@@ -30,8 +32,10 @@ export default function App() {
           <Route path="/technical" element={<TechnicalAnalysisPage />} />
           <Route path="/smart-money" element={<SmartMoneyPage />} />
           <Route path="/cash" element={<CashPage />} />
-          <Route path="/coach" element={<AiCoachPage />} />
-          <Route path="/risk" element={<RiskPage />} />
+          <Route path="/strategies" element={<StrategiesPage />} />
+          <Route path="/trades/add" element={<AddTradePage />} />
+          <Route path="/data" element={<DataPage />} />
+          <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

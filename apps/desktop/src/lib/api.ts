@@ -1,5 +1,4 @@
 export type Market = 'Stocks' | 'Funds' | 'Crypto' | 'Forex'
-export type TradeType = 'Long' | 'Short'
 
 export type PsychologyState = 'Confident' | 'Fear' | 'FOMO' | 'Calm' | 'Overtrading'
 
@@ -13,6 +12,17 @@ export type Account = {
 }
 
 export type AccountCreate = { name: string }
+
+export type Strategy = {
+  id: number
+  account_id: number
+  name: string
+  color: string | null
+  created_at: string
+}
+
+export type StrategyCreate = { name: string; color?: string }
+export type StrategyUpdate = Partial<StrategyCreate>
 
 export type PsychologyEntry = {
   id: number
@@ -52,6 +62,22 @@ export type PerfRow = {
   win_rate: number
 }
 
+export type PerformanceAdvancedMetrics = {
+  win_rate: number
+  avg_win_amount: number
+  max_win_amount: number
+  avg_loss_amount: number
+  max_loss_amount: number
+  avg_risk_reward: number
+  max_risk_reward: number
+  profit_factor: number
+  gross_win: number
+  gross_loss: number
+  closed_count: number
+  win_count: number
+  loss_count: number
+}
+
 export type PerformanceAnalyticsResponse = {
   overall: { count: number; total: number; avg: number; win_rate: number }
   closed_trades: number
@@ -66,7 +92,7 @@ export type PerformanceAnalyticsResponse = {
   by_hour: PerfRow[]
   by_strategy: PerfRow[]
   by_market: PerfRow[]
-  by_trade_type: PerfRow[]
+  advanced?: PerformanceAdvancedMetrics
 }
 
 export type AssetClass = 'Stocks' | 'ETFs / Funds' | 'Crypto' | 'Cash'
@@ -127,16 +153,19 @@ export type OverviewChartSeries = {
   net_deposited: number[]
   total_return_value: number[]
   portfolio_value_liquidation?: number[]
+  total_pnl?: number[]
 }
 
 export type OverviewResponse = {
   kpis: OverviewKpis
   allocation: Record<string, number>
   fund_allocation?: Record<string, number>
+  earnings_allocation?: Record<string, number>
   holdings: HoldingRow[]
   trades: Trade[]
   chart: OverviewChartSeries
 }
+
 
 export type QuantRow = Record<string, string | number | null>
 
@@ -165,7 +194,6 @@ export type Trade = {
   id: number
   symbol: string
   market: Market
-  trade_type: TradeType
   entry_price: number
   exit_price: number | null
   stop_loss: number | null
@@ -184,6 +212,7 @@ export type Trade = {
   return_pct: number | null
   risk_reward: number | null
   duration_seconds: number | null
+  strategies: Strategy[]
 }
 
 export type TradeCreate = Omit<
@@ -194,14 +223,14 @@ export type TradeCreate = Omit<
   | 'risk_reward'
   | 'duration_seconds'
   | 'screenshot_path'
->
+  | 'strategies'
+> & { strategy_ids?: number[] }
 
 export type TradeUpdate = Partial<
   Pick<
     Trade,
     | 'symbol'
     | 'market'
-    | 'trade_type'
     | 'entry_price'
     | 'exit_price'
     | 'stop_loss'
@@ -215,10 +244,10 @@ export type TradeUpdate = Partial<
     | 'exit_fees'
     | 'notes'
     | 'lessons_learned'
-  >
+  > & { strategy_ids?: number[] }
 >
 
-export type CashTxType = 'Deposit' | 'Withdraw' | 'Trade Buy' | 'Trade Sell' | 'Fee' | 'Adjustment'
+export type CashTxType = 'Deposit' | 'Withdraw' | 'Trade Buy' | 'Trade Sell' | 'Fee' | 'Adjustment' | 'Dividend'
 
 export type CashTx = {
   id: number
@@ -364,7 +393,25 @@ export const api = {
     apiFetch<Lesson>('/lessons', { method: 'POST', body: JSON.stringify(payload) }),
   deleteLesson: (id: number) => apiFetch<{ deleted: true }>(`/lessons/${id}`, { method: 'DELETE' }),
 
-  downloadPerformancePdf: (accountId: number = 1) => download(`/reports/performance.pdf?account_id=${accountId}`),
+  exportReportPdf: (params: { start?: string; end?: string; account_id?: number } = {}) => {
+    const q = new URLSearchParams()
+    if (params.start) q.set('start', params.start)
+    if (params.end) q.set('end', params.end)
+    if (params.account_id) q.set('account_id', String(params.account_id))
+    return download(`/reports/performance.pdf?${q.toString()}`)
+  },
+  exportReportExcel: (params: { start?: string; end?: string; account_id?: number } = {}) => {
+    const q = new URLSearchParams()
+    if (params.start) q.set('start', params.start)
+    if (params.end) q.set('end', params.end)
+    if (params.account_id) q.set('account_id', String(params.account_id))
+    return download(`/reports/performance.xlsx?${q.toString()}`)
+  },
+
+  recordDividend: (payload: { account_id: number; symbol: string; amount: number; is_stock_dividend?: boolean }) =>
+    apiFetch<{ status: string }>('/cash/dividend', { method: 'POST', body: JSON.stringify(payload) }),
+  recordTradeDividend: (tradeId: number, payload: { amount: number; is_stock_dividend: boolean; at?: string; note?: string }) =>
+    apiFetch<{ status: string }>(`/trades/${tradeId}/dividend`, { method: 'POST', body: JSON.stringify(payload) }),
 
   overview: (accountId: number = 1, method?: string) => {
     const q = new URLSearchParams()
@@ -426,5 +473,12 @@ export const api = {
       body: fd,
     })
   },
+
+  listStrategies: (accountId: number = 1) => apiFetch<Strategy[]>(`/strategies?account_id=${accountId}`),
+  createStrategy: (payload: StrategyCreate, accountId: number = 1) =>
+    apiFetch<Strategy>(`/strategies?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateStrategy: (id: number, payload: StrategyUpdate) =>
+    apiFetch<Strategy>(`/strategies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteStrategy: (id: number) => apiFetch<{ deleted: true }>(`/strategies/${id}`, { method: 'DELETE' }),
 }
 

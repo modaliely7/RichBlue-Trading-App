@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select
+from sqlalchemy.orm import selectinload
 import bisect
 
 import numpy as np
@@ -23,6 +24,9 @@ print(f"DEBUG: pandas imported as pd: {pd}")
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 from .analytics import calc_duration_seconds, calc_pnl, calc_return_pct, calc_risk_reward
 from .db import session_scope
@@ -56,7 +60,8 @@ from .models import (
     PsychologyEntry,
     PsychologyState,
     Trade,
-    TradeType,
+    Strategy,
+    trade_strategy_table,
 )
 from .schemas import (
     AccountRead,
@@ -83,6 +88,11 @@ from .schemas import (
     TradeCreate,
     TradeRead,
     TradeUpdate,
+    PerformanceAnalyticsResponse,
+    DividendRequest,
+    StrategyRead,
+    StrategyCreate,
+    StrategyUpdate,
 )
 from .data_providers import fetch_price_and_fundamentals_yfinance, fetch_price_history_yfinance, fetch_fallback
 import json
@@ -110,13 +120,22 @@ _API_DATA_BASE = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), ".
 app.mount("/static", StaticFiles(directory=str(_API_DATA_BASE)), name="static")
 
 
+def _to_strategy_read(s: Strategy) -> StrategyRead:
+    return StrategyRead(
+        id=s.id,
+        account_id=s.account_id,
+        name=s.name,
+        color=s.color,
+        created_at=s.created_at,
+    )
+
+
 def _to_trade_read(t: Trade) -> TradeRead:
     pnl = calc_pnl(t)
     return TradeRead(
         id=t.id,
         symbol=t.symbol,
         market=t.market,
-        trade_type=t.trade_type,
         entry_price=t.entry_price,
         exit_price=t.exit_price,
         stop_loss=t.stop_loss,
@@ -135,6 +154,7 @@ def _to_trade_read(t: Trade) -> TradeRead:
         return_pct=calc_return_pct(t),
         risk_reward=calc_risk_reward(t),
         duration_seconds=calc_duration_seconds(t.entry_date, t.exit_date),
+        strategies=[_to_strategy_read(s) for s in t.strategies],
     )
 
 
@@ -241,13 +261,56 @@ def delete_account(account_id: int):
         return {"deleted": True}
 
 
-@app.get("/performance/analytics")
-def performance_analytics(start: str | None = None, end: str | None = None) -> dict:
+# --- Strategy Management ---
+
+@app.get("/strategies", response_model=list[StrategyRead])
+def list_strategies(account_id: int = 1):
+    with session_scope() as s:
+        rows = s.execute(select(Strategy).where(Strategy.account_id == account_id).order_by(Strategy.name.asc())).scalars().all()
+        return [_to_strategy_read(r) for r in rows]
+
+
+@app.post("/strategies", response_model=StrategyRead)
+def create_strategy(payload: StrategyCreate, account_id: int = 1):
+    with session_scope() as s:
+        r = Strategy(**payload.model_dump(), account_id=account_id)
+        s.add(r)
+        s.flush()
+        s.refresh(r)
+        return _to_strategy_read(r)
+
+
+@app.put("/strategies/{strategy_id}", response_model=StrategyRead)
+def update_strategy(strategy_id: int, payload: StrategyUpdate):
+    with session_scope() as s:
+        r = s.get(Strategy, strategy_id)
+        if not r:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        data = payload.model_dump(exclude_unset=True)
+        for k, v in data.items():
+            setattr(r, k, v)
+        s.commit()
+        s.refresh(r)
+        return _to_strategy_read(r)
+
+
+@app.delete("/strategies/{strategy_id}")
+def delete_strategy(strategy_id: int):
+    with session_scope() as s:
+        r = s.get(Strategy, strategy_id)
+        if not r:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        s.delete(r)
+        return {"deleted": True}
+
+
+@app.get("/performance/analytics", response_model=PerformanceAnalyticsResponse)
+def performance_analytics(account_id: int = 1, start: str | None = None, end: str | None = None):
     """
     Advanced performance breakdowns from closed trades (uses exit_date when available).
     """
     with session_scope() as s:
-        trades = s.execute(select(Trade)).scalars().all()
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
         closed = [t for t in trades if t.exit_price is not None and calc_pnl(t) is not None]
 
         def trade_dt(t: Trade) -> datetime:
@@ -256,7 +319,12 @@ def performance_analytics(start: str | None = None, end: str | None = None) -> d
         def parse_iso(x: str | None) -> datetime | None:
             if not x:
                 return None
-            return datetime.fromisoformat(x.replace("Z", "+00:00"))
+            try:
+                # Handle Z or +00:00 then strip tzinfo to avoid naive/aware mismatch
+                dt = datetime.fromisoformat(x.replace("Z", "+00:00"))
+                return dt.replace(tzinfo=None)
+            except:
+                return None
 
         start_dt = parse_iso(start)
         end_dt = parse_iso(end)
@@ -276,11 +344,14 @@ def performance_analytics(start: str | None = None, end: str | None = None) -> d
                 "win_rate": float(wins / len(pnls) * 100.0),
             }
 
-        def group(key_fn):
+        def group(key_fn, multi=False):
             buckets: dict[str, list[float]] = {}
             for t in closed:
-                k = key_fn(t)
-                buckets.setdefault(k, []).append(calc_pnl(t) or 0.0)
+                keys = key_fn(t)
+                if not multi:
+                    keys = [keys]
+                for k in keys:
+                    buckets.setdefault(k, []).append(calc_pnl(t) or 0.0)
             rows = []
             for k, pnls in buckets.items():
                 s2 = summarize_pnls(pnls)
@@ -288,123 +359,328 @@ def performance_analytics(start: str | None = None, end: str | None = None) -> d
             rows.sort(key=lambda r: (r["avg"], r["count"]), reverse=True)
             return rows
 
-        # Aggregations
         by_month = group(lambda t: trade_dt(t).strftime("%Y-%m"))
+        by_month.sort(key=lambda r: r["key"]) # sort chronologically
+        
         by_dow = group(lambda t: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][trade_dt(t).weekday()])
         by_hour = group(lambda t: f"{trade_dt(t).hour:02d}:00")
-        by_strategy = group(lambda t: (t.strategy_used or "").strip() or "Unspecified")
+        
+        # Multiple strategies per trade
+        by_strategy = group(lambda t: [s.name for s in t.strategies] if t.strategies else ["Unspecified"], multi=True)
+        
         by_market = group(lambda t: t.market.value)
-        by_type = group(lambda t: t.trade_type.value)
-
-        best_strategy = next((r for r in by_strategy if r["count"] >= 3), None)
-        worst_strategy = next((r for r in reversed(by_strategy) if r["count"] >= 3), None) if by_strategy else None
-
-        best_day = next((r for r in by_dow if r["count"] >= 3), None)
-        worst_day = next((r for r in reversed(by_dow) if r["count"] >= 3), None) if by_dow else None
 
         best_hour = next((r for r in by_hour if r["count"] >= 3), None)
         worst_hour = next((r for r in reversed(by_hour) if r["count"] >= 3), None) if by_hour else None
 
         overall = summarize_pnls([calc_pnl(t) or 0.0 for t in closed])
+        
+        from .analytics import calc_advanced_metrics
+        advanced = calc_advanced_metrics(closed)
 
-        return {
+        res = {
             "overall": overall,
-            "best_strategy": best_strategy,
-            "worst_strategy": worst_strategy,
-            "best_day": best_day,
-            "worst_day": worst_day,
-            "best_hour": best_hour,
-            "worst_hour": worst_hour,
+            "closed_trades": len(closed),
             "by_month": by_month,
             "by_day_of_week": by_dow,
             "by_hour": by_hour,
             "by_strategy": by_strategy,
             "by_market": by_market,
-            "by_trade_type": by_type,
-            "closed_trades": len(closed),
+            "advanced": advanced,
+            "best_strategy": None,
+            "worst_strategy": None,
+            "best_day": None,
+            "worst_day": None,
+            "best_hour": best_hour,
+            "worst_hour": worst_hour,
         }
+        
+        if by_strategy:
+            res["best_strategy"] = by_strategy[0]
+            res["worst_strategy"] = by_strategy[-1]
+        if by_dow:
+            res["best_day"] = sorted(by_dow, key=lambda r: r["total"], reverse=True)[0]
+            res["worst_day"] = sorted(by_dow, key=lambda r: r["total"])[0]
+        if by_hour:
+            res["best_hour"] = sorted(by_hour, key=lambda r: r["total"], reverse=True)[0]
+            res["worst_hour"] = sorted(by_hour, key=lambda r: r["total"])[0]
+
+        return res
 
 
 @app.get("/reports/performance.pdf")
-def performance_report_pdf() -> StreamingResponse:
-    analytics = performance_analytics()
-
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=letter)
-    w, h = letter
-
-    def text(x: float, y: float, s: str, size: int = 10):
-        c.setFont("Helvetica", size)
-        c.drawString(x, y, s)
-
-    def heading(y: float, s: str):
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(0.75 * inch, y, s)
-
-    def subheading(y: float, s: str):
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(0.75 * inch, y, s)
-
-    y = h - 0.9 * inch
-    heading(y, "Trading Performance Report")
-    y -= 0.3 * inch
-    text(0.75 * inch, y, f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", 9)
-    y -= 0.35 * inch
-
+def performance_report_pdf(account_id: int = 1, start: str | None = None, end: str | None = None) -> Response:
+    analytics = performance_analytics(account_id=account_id, start=start, end=end)
+    adv = analytics.get("advanced", {})
     overall = analytics.get("overall", {}) or {}
     closed_trades = analytics.get("closed_trades", 0)
-    subheading(y, "Overall")
-    y -= 0.22 * inch
-    text(0.75 * inch, y, f"Closed trades used: {closed_trades}")
-    y -= 0.18 * inch
-    text(0.75 * inch, y, f"Total PnL: {overall.get('total', 0.0):.2f}")
-    y -= 0.18 * inch
-    text(0.75 * inch, y, f"Average PnL: {overall.get('avg', 0.0):.2f}")
-    y -= 0.18 * inch
-    text(0.75 * inch, y, f"Win rate: {overall.get('win_rate', 0.0):.2f}%")
-    y -= 0.35 * inch
 
-    subheading(y, "Highlights (min 3 trades per bucket)")
-    y -= 0.22 * inch
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    title_style = ParagraphStyle(
+        'ReportTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor("#0ea5e9"),
+        spaceAfter=12,
+        alignment=1 # Center
+    )
+    section_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor("#1e293b"),
+        spaceBefore=16,
+        spaceAfter=8,
+        borderPadding=5,
+        borderWidth=0,
+        backColor=colors.HexColor("#f1f5f9")
+    )
+    metric_label_style = ParagraphStyle('MetricLabel', parent=styles['Normal'], fontSize=10, textColor=colors.grey)
+    metric_value_style = ParagraphStyle('MetricValue', parent=styles['Normal'], fontSize=12, fontWeight='Bold')
 
-    def highlight_line(label: str, row: dict | None):
-        nonlocal y
-        if not row:
-            text(0.75 * inch, y, f"{label}: —")
-            y -= 0.18 * inch
-            return
-        text(
-            0.75 * inch,
-            y,
-            f"{label}: {row.get('key')} | trades {row.get('count')} | avg {row.get('avg', 0.0):.2f} | win {row.get('win_rate', 0.0):.2f}%",
-        )
-        y -= 0.18 * inch
+    elements = []
+    
+    # Header
+    elements.append(Paragraph("Performance Report", title_style))
+    period_str = f"{start or 'All Time'} to {end or 'Present'}"
+    elements.append(Paragraph(f"Period: {period_str}", styles['Normal']))
+    elements.append(Paragraph(f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}", styles['Normal']))
+    elements.append(Spacer(1, 10))
 
-    highlight_line("Best strategy", analytics.get("best_strategy"))
-    highlight_line("Worst strategy", analytics.get("worst_strategy"))
-    highlight_line("Best day", analytics.get("best_day"))
-    highlight_line("Worst day", analytics.get("worst_day"))
-    highlight_line("Best hour", analytics.get("best_hour"))
-    highlight_line("Worst hour", analytics.get("worst_hour"))
-    y -= 0.2 * inch
+    # Summary Box
+    summary_data = [
+        [Paragraph("Portfolio Summary", styles['Heading3']), ""],
+        [Paragraph(f"Total Net PnL: {overall.get('total', 0.0):.2f}", styles['Normal']), 
+         Paragraph(f"Win Rate: {adv.get('win_rate', 0.0):.1f}%", styles['Normal'])],
+        [Paragraph(f"Profit Factor: {adv.get('profit_factor', 0.0):.2f}", styles['Normal']), 
+         Paragraph(f"Total Trades: {closed_trades}", styles['Normal'])]
+    ]
+    summary_table = Table(summary_data, colWidths=[270, 270])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ('SPAN', (0, 0), (1, 0)),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#e2e8f0")),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
 
-    subheading(y, "Top strategies by average PnL")
-    y -= 0.22 * inch
-    strategies = analytics.get("by_strategy") or []
-    for r in strategies[:12]:
-        text(0.75 * inch, y, f"- {r.get('key')}: avg {r.get('avg', 0.0):.2f} | trades {r.get('count')} | win {r.get('win_rate', 0.0):.2f}%")
-        y -= 0.16 * inch
-        if y < 1.0 * inch:
-            c.showPage()
-            y = h - 0.9 * inch
-            subheading(y, "Top strategies (continued)")
-            y -= 0.25 * inch
+    # KPI Grid
+    kpi_data = [
+        [Paragraph("Closed Trades", metric_label_style), Paragraph("Win Rate", metric_label_style), Paragraph("Profit Factor", metric_label_style)],
+        [Paragraph(str(closed_trades), metric_value_style), Paragraph(f"{adv.get('win_rate', 0.0):.1f}%", metric_value_style), Paragraph(f"{adv.get('profit_factor', 0.0):.2f}", metric_value_style)],
+        [Paragraph("Total Net PnL", metric_label_style), Paragraph("Avg Win", metric_label_style), Paragraph("Avg Loss", metric_label_style)],
+        [Paragraph(f"{overall.get('total', 0.0):.2f}", metric_value_style), Paragraph(f"{adv.get('avg_win_amount', 0.0):.2f}", metric_value_style), Paragraph(f"{adv.get('avg_loss_amount', 0.0):.2f}", metric_value_style)],
+    ]
+    kpi_table = Table(kpi_data, colWidths=[180, 180, 180])
+    kpi_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+    ]))
+    elements.append(kpi_table)
+    elements.append(Spacer(1, 20))
 
-    c.showPage()
-    c.save()
+    # Top Strategies / Markets
+    elements.append(Paragraph("Performance Highlights", section_style))
+    highlights = []
+    for h_type in ["by_strategy", "by_market"]:
+        data = analytics.get(h_type, [])
+        valid = [d for d in data if d.get("count", 0) >= 3]
+        if valid:
+            valid.sort(key=lambda x: x.get("avg", 0), reverse=True)
+            label = "Strategies" if h_type == "by_strategy" else "Markets"
+            best = valid[0]
+            highlights.append(Paragraph(f"<b>Best {label}:</b> {best.get('key')} ({best.get('count')} trades, Avg PnL: {best.get('avg'):.2f})", styles['Normal']))
+    
+    if highlights:
+        for h in highlights:
+            elements.append(h)
+    else:
+        elements.append(Paragraph("Not enough data for highlights yet (minimum 3 trades per category).", styles['Italic']))
+    
+    elements.append(Spacer(1, 20))
+
+    # Recent Trades Table
+    elements.append(Paragraph("Trade Log", section_style))
+    with session_scope() as s:
+        # Use the same date parsing as performance_analytics
+        def parse_iso_naive(x: str | None) -> datetime | None:
+            if not x: return None
+            try:
+                return datetime.fromisoformat(x.replace("Z", "+00:00")).replace(tzinfo=None)
+            except: return None
+            
+        s_dt = parse_iso_naive(start)
+        e_dt = parse_iso_naive(end)
+        
+        stmt = select(Trade).where(Trade.account_id == account_id).options(selectinload(Trade.strategies))
+        if s_dt:
+            stmt = stmt.where(Trade.entry_date >= s_dt)
+        if e_dt:
+            stmt = stmt.where(Trade.entry_date <= e_dt)
+            
+        stmt = stmt.order_by(Trade.entry_date.desc()).limit(50)
+        trades = s.execute(stmt).scalars().all()
+        
+        table_data = [["Symbol", "Entry", "Exit", "PnL", "Strategies"]]
+        for t in trades:
+            pnl = calc_pnl(t)
+            pnl_str = f"{pnl:.2f}" if pnl is not None else "-"
+            strategies_str = ", ".join([s.name for s in t.strategies])
+            
+            row = [
+                t.symbol,
+                t.entry_date.strftime("%Y-%m-%d"),
+                t.exit_date.strftime("%Y-%m-%d") if t.exit_date else "-",
+                pnl_str,
+                strategies_str
+            ]
+            table_data.append(row)
+            
+        t = Table(table_data, colWidths=[90, 100, 100, 90, 160])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f8fafc")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#64748b")),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        # Color PnL column
+        for i, row_data in enumerate(table_data[1:], 1):
+            try:
+                pnl_val = float(row_data[4])
+                if pnl_val > 0:
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#10b981"))]))
+                elif pnl_val < 0:
+                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#f43f5e"))]))
+            except:
+                pass
+
+        elements.append(t)
+
+    # Build PDF
+    doc.build(elements)
     buf.seek(0)
-    headers = {"Content-Disposition": 'attachment; filename="performance_report.pdf"'}
-    return StreamingResponse(buf, media_type="application/pdf", headers=headers)
+    
+    filename = f"trading_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(buf.getvalue(), media_type="application/pdf", headers=headers)
+
+
+@app.get("/reports/performance.xlsx")
+def performance_report_excel(account_id: int = 1, start: str | None = None, end: str | None = None) -> Response:
+    with session_scope() as s:
+        trades = s.execute(
+            select(Trade)
+            .where(Trade.account_id == account_id)
+            .options(selectinload(Trade.strategies))
+        ).scalars().all()
+        data = []
+        for t in trades:
+            data.append({
+                "ID": t.id,
+                "Symbol": t.symbol,
+                "Market": t.market.value,
+                "Entry Price": t.entry_price,
+                "Exit Price": t.exit_price,
+                "Size": t.position_size,
+                "PnL": calc_pnl(t),
+                "Return %": calc_return_pct(t),
+                "Entry Date": t.entry_date.strftime("%Y-%m-%d %H:%M"),
+                "Exit Date": t.exit_date.strftime("%Y-%m-%d %H:%M") if t.exit_date else "",
+                "Fees": (t.fees or 0) + (t.exit_fees or 0),
+                "Strategy": ", ".join([s.name for s in t.strategies]),
+                "Notes": t.notes
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Filter by date if provided
+        if start or end:
+            df["Entry Date Dt"] = pd.to_datetime(df["Entry Date"])
+            
+            if start:
+                s_dt = datetime.fromisoformat(start.replace("Z", "+00:00")).replace(tzinfo=None)
+                df = df[df["Entry Date Dt"] >= s_dt]
+            if end:
+                e_dt = datetime.fromisoformat(end.replace("Z", "+00:00")).replace(tzinfo=None)
+                df = df[df["Entry Date Dt"] <= e_dt]
+            
+            # Remove the temporary column
+            df = df.drop(columns=["Entry Date Dt"])
+        
+        if "Entry Date Dt" in df.columns:
+            df = df.drop(columns=["Entry Date Dt"])
+
+        if df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                pd.DataFrame([{"Message": "No trades found for this period"}]).to_excel(writer, index=False)
+            output.seek(0)
+            return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": 'attachment; filename="report_empty.xlsx"'})
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Trades')
+            
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Trades']
+            for i, col in enumerate(df.columns):
+                column_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
+                worksheet.set_column(i, i, column_len)
+        
+        output.seek(0)
+        filename = f"performance_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return Response(output.getvalue(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+
+
+@app.post("/cash/dividend")
+def record_dividend(payload: DividendRequest, account_id: int = 1):
+    with session_scope() as s:
+        # If trade_id is provided, verify it belongs to the account
+        trade = None
+        if payload.trade_id:
+            trade = s.execute(select(Trade).where(Trade.id == payload.trade_id, Trade.account_id == account_id)).scalars().first()
+            if not trade:
+                raise HTTPException(status_code=404, detail="Trade not found")
+
+        amount_val = payload.amount
+        if payload.is_stock_dividend:
+            if not trade:
+                raise HTTPException(status_code=400, detail="Stock dividend requires a linked trade")
+            # Increase position size
+            trade.position_size += payload.amount
+            # Cash impact is zero for stock dividends
+            amount_val = 0.0
+            note = payload.note or f"Stock Dividend ({payload.amount} shares) for {payload.symbol}"
+        else:
+            note = payload.note or f"Cash Dividend for {payload.symbol}"
+
+        tx = CashTransaction(
+            account_id=account_id,
+            amount=amount_val,
+            tx_type=CashTxType.dividend,
+            symbol=payload.symbol.strip().upper(),
+            trade_id=payload.trade_id,
+            at=payload.at or datetime.now(UTC),
+            note=note
+        )
+        s.add(tx)
+        return {"status": "success", "new_size": trade.position_size if trade else None}
 
 
 @app.get("/trades", response_model=list[TradeRead])
@@ -436,6 +712,8 @@ def _add_cash_tx(
     tx_type: CashTxType,
     at: datetime | None = None,
     note: str | None = None,
+    trade_id: int | None = None,
+    is_stock_dividend: bool = False,
     trade: Trade | None = None,
 ) -> CashTransaction:
     x = CashTransaction(
@@ -533,7 +811,6 @@ def _funds_cost_from_assets(s, account_id: int = 1) -> float:
 
 
 @app.get("/overview", response_model=OverviewResponse)
-@app.get("/overview", response_model=OverviewResponse)
 def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
     with session_scope() as s:
         trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.asc())).scalars().all()
@@ -577,7 +854,7 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
         stocks_mv_current = float(sum(float(h.market_value or 0.0) for h in holdings))
         funds_mv_current = float(sum(float(a.current_price or 0.0) * float(a.quantity or 0.0) for a in funds_assets))
         
-        realized_total = realized_pnl_cumulative_through(trades, end_day)
+        realized_total = realized_pnl_cumulative_through(trades, txs, end_day)
         unreal_total = unrealized_pnl_cumulative_through(trades, end_day, price_by_symbol)
         open_positions_count = int(sum(1 for h in holdings if (h.open_quantity or 0.0) != 0.0))
 
@@ -664,6 +941,8 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
                             running_cash += float(ev.amount or 0.0)
                             if ev.tx_type in {CashTxType.deposit, CashTxType.withdraw}:
                                 running_net_dep += float(ev.amount or 0.0)
+                            if ev.tx_type in {CashTxType.dividend, CashTxType.adjustment}:
+                                running_realized_pnl += float(ev.amount or 0.0)
                         elif etype == "entry":
                             sym = (ev.symbol or "").strip().upper()
                             qty = float(ev.position_size or 0.0)
@@ -719,6 +998,48 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             equity_value_series = [portfolio_value_now]
             total_pnl_series = [total_return_value_now]
 
+        # Compute earnings allocation: realized P/L split by asset class
+        earnings_stocks = 0.0
+        earnings_funds = 0.0
+        for t in trades:
+            if t.exit_price is None:
+                continue
+            pnl_val = calc_pnl(t)
+            if pnl_val is None:
+                continue
+            if t.market == Market.funds:
+                earnings_funds += float(pnl_val)
+            else:
+                earnings_stocks += float(pnl_val)
+
+        # If unrealized should be included (liquidation view), add them too
+        if method == "liquidation":
+            for t in trades:
+                if t.exit_price is not None:
+                    continue
+                sym = (t.symbol or "").strip().upper()
+                px = price_by_symbol.get(sym)
+                if px is None:
+                    continue
+                qty = float(t.position_size or 0.0)
+                cost = float((t.entry_price or 0.0) * qty) + float(t.fees or 0.0)
+                upnl = float(px * qty) - cost
+                if t.market == Market.funds:
+                    earnings_funds += upnl
+                else:
+                    earnings_stocks += upnl
+
+        earnings_allocation: dict[str, float] = {}
+        if abs(earnings_stocks) > 1e-9:
+            earnings_allocation["Stocks"] = earnings_stocks
+        if abs(earnings_funds) > 1e-9:
+            earnings_allocation["Funds"] = earnings_funds
+            
+        # Add Dividends to Earnings Allocation
+        div_total = sum(float(tx.amount or 0.0) for tx in txs if tx.tx_type == CashTxType.dividend)
+        if abs(div_total) > 1e-9:
+            earnings_allocation["Dividends"] = earnings_allocation.get("Dividends", 0.0) + div_total
+
         # Construct response
         allocation_dict: dict[str, float] = {"Cash": cash_now, "Stocks": stocks_cost, "Funds": funds_cost}
 
@@ -737,6 +1058,7 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
             },
             allocation=allocation_dict,
             fund_allocation=fund_allocation,
+            earnings_allocation=earnings_allocation if earnings_allocation else None,
             holdings=holdings,
             trades=[_to_trade_read(t) for t in trades],
             chart={
@@ -752,12 +1074,74 @@ def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
         return res
 
 
+
 @app.get("/cash/balance", response_model=CashBalanceResponse)
 def cash_balance(account_id: int = 1) -> CashBalanceResponse:
     with session_scope() as s:
         return CashBalanceResponse(balance=_cash_balance(s, account_id))
 
 
+@app.post("/cash/dividend")
+def add_dividend(req: DividendRequest, account_id: int = 1):
+    with session_scope() as s:
+        at = req.at or datetime.now(UTC)
+        note = req.note or f"Dividend for {req.symbol}"
+        tx = _add_cash_tx(
+            s,
+            account_id=account_id,
+            amount=req.amount,
+            tx_type=CashTxType.dividend,
+            at=at,
+            note=note
+        )
+        tx.symbol = req.symbol
+        s.commit()
+        return {"ok": True, "balance": _cash_balance(s, account_id)}
+
+@app.post("/trades/{trade_id}/dividend")
+def add_trade_dividend(trade_id: int, payload: DividendRequest, account_id: int = 1):
+    with session_scope() as s:
+        trade = s.get(Trade, trade_id)
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
+        
+        at = payload.at or datetime.utcnow()
+        note = payload.note or f"Dividend for {trade.symbol}"
+        
+        if payload.is_stock_dividend:
+            # Stock dividend: increases size, lowers avg cost
+            old_val = trade.position_size * trade.entry_price
+            new_size = trade.position_size + payload.amount
+            if new_size > 0:
+                trade.entry_price = old_val / new_size
+                trade.position_size = new_size
+            
+            # Record a 0-amount transaction just for history tracking of the event
+            tx = _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=0,
+                tx_type=CashTxType.dividend,
+                at=at,
+                note=f"[Stock Dividend] {payload.amount} shares added. {note}"
+            )
+            tx.trade_id = trade_id
+            tx.symbol = trade.symbol
+        else:
+            # Cash dividend: positive inflow
+            tx = _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=payload.amount,
+                tx_type=CashTxType.dividend,
+                at=at,
+                note=note
+            )
+            tx.trade_id = trade_id
+            tx.symbol = trade.symbol
+        
+        s.commit()
+        return {"ok": True, "balance": _cash_balance(s, account_id)}
 @app.get("/cash/transactions", response_model=list[CashTxRead])
 def cash_transactions(account_id: int = 1, limit: int = 300, offset: int = 0) -> list[CashTxRead]:
     with session_scope() as s:
@@ -910,11 +1294,16 @@ def create_trade(payload: TradeCreate, account_id: int = 1) -> TradeRead:
     with session_scope() as s:
         data = payload.model_dump()
         required_cash = float((data.get("entry_price") or 0.0) * (data.get("position_size") or 0.0) + (data.get("fees") or 0.0))
-        if required_cash > 0 and _cash_balance(s, account_id) < required_cash:
+        is_closed = data.get("exit_price") is not None
+        if not is_closed and required_cash > 0 and _cash_balance(s, account_id) < required_cash:
             raise HTTPException(status_code=400, detail=f"Insufficient cash. Required {required_cash:.2f}.")
 
+        strategy_ids = data.pop("strategy_ids", None)
         t = Trade(**data)
         t.account_id = account_id
+        if strategy_ids:
+            st_objs = s.execute(select(Strategy).where(Strategy.id.in_(strategy_ids))).scalars().all()
+            t.strategies = st_objs
         s.add(t)
         # Build a mapping of current prices for liquidation/unrealized calculations
         assets_for_prices = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
@@ -973,6 +1362,11 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
 
         # Apply field updates
         data = payload.model_dump(exclude_unset=True)
+        strategy_ids = data.pop("strategy_ids", None)
+        if strategy_ids is not None:
+            st_objs = s.execute(select(Strategy).where(Strategy.id.in_(strategy_ids))).scalars().all()
+            t.strategies = st_objs
+
         for k, v in data.items():
             setattr(t, k, v)
 
@@ -1059,15 +1453,6 @@ def _parse_market(v: str | None) -> Market:
     raise ValueError(f"Invalid market: {v}")
 
 
-def _parse_trade_type(v: str | None) -> TradeType:
-    if not v:
-        return TradeType.long
-    x = v.strip().lower()
-    if x in ["long", "buy"]:
-        return TradeType.long
-    if x in ["short", "sell"]:
-        return TradeType.short
-    raise ValueError(f"Invalid trade_type: {v}")
 
 
 def _parse_float(v: str | None) -> float | None:
@@ -1345,7 +1730,6 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     raise ValueError("symbol is required")
 
                 market = _parse_market(row.get("market"))
-                trade_type = _parse_trade_type(row.get("trade_type"))
 
                 entry_price = _parse_float(row.get("entry_price"))
                 if entry_price is None:
@@ -1359,7 +1743,6 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     account_id=account_id,
                     symbol=symbol,
                     market=market,
-                    trade_type=trade_type,
                     entry_price=entry_price,
                     exit_price=_parse_float(row.get("exit_price")),
                     stop_loss=_parse_float(row.get("stop_loss")),
@@ -1392,7 +1775,6 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                 "id",
                 "symbol",
                 "market",
-                "trade_type",
                 "entry_price",
                 "exit_price",
                 "stop_loss",
@@ -1425,8 +1807,7 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                         t.id,
                         t.symbol,
                         t.market.value,
-                        t.trade_type.value,
-                        t.entry_price,
+                        str(t.entry_price),
                         t.exit_price if t.exit_price is not None else "",
                         t.stop_loss if t.stop_loss is not None else "",
                         t.take_profit if t.take_profit is not None else "",
@@ -1458,8 +1839,10 @@ def backup_dataset(account_id: int = 1) -> dict:
         psychology = s.execute(select(PsychologyEntry).where(PsychologyEntry.account_id == account_id).order_by(PsychologyEntry.at.asc())).scalars().all()
         lessons = s.execute(select(Lesson).join(Trade).where(Trade.account_id == account_id).order_by(Lesson.updated_at.asc())).scalars().all()
         cash_txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
+        strategies = s.execute(select(Strategy).where(Strategy.account_id == account_id)).scalars().all()
         payload = {
             "generated_at": datetime.utcnow().isoformat(),
+            "strategies": [_to_strategy_read(s).model_dump() for s in strategies],
             "trades": [_to_trade_read(t).model_dump() for t in trades],
             "assets": [_to_asset_read(a).model_dump() for a in assets],
             "psychology_entries": [_to_psy_read(p).model_dump() for p in psychology],
@@ -1488,7 +1871,14 @@ def clear_dataset(account_id: int = 1) -> dict:
         s.execute(delete(CashTransaction).where(CashTransaction.account_id == account_id))
         s.execute(delete(Trade).where(Trade.account_id == account_id))
         s.execute(delete(Asset).where(Asset.account_id == account_id))
+        s.execute(delete(Strategy).where(Strategy.account_id == account_id))
+        # Cascade should handle trade_strategy_table if trades are deleted, but let's be safe
+        s.execute(trade_strategy_table.delete().where(trade_strategy_table.c.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
         return {"status": "cleared"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.post("/settings/restore")
@@ -1496,23 +1886,56 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
     content = await file.read()
     data = json.loads(content)
     
+    def parse_dt(s):
+        if not s: return None
+        if isinstance(s, datetime): return s
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except:
+            return None
+
     with session_scope() as s:
-        # Clear existing
+        # Clear existing data for this account
         s.execute(delete(PsychologyEntry).where(PsychologyEntry.account_id == account_id))
         s.execute(delete(Lesson).where(Lesson.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
         s.execute(delete(CashTransaction).where(CashTransaction.account_id == account_id))
         s.execute(delete(Trade).where(Trade.account_id == account_id))
         s.execute(delete(Asset).where(Asset.account_id == account_id))
+        s.execute(delete(Strategy).where(Strategy.account_id == account_id))
+        s.execute(trade_strategy_table.delete().where(trade_strategy_table.c.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
         s.flush()
 
         old_to_new_trade_id = {}
+        old_to_new_strategy_id = {}
+
+        # Restore Strategies
+        st_objs_by_old_id = {}
+        for str_data in data.get("strategies", []):
+            old_id = str_data.pop("id", None)
+            # Remove read-only
+            str_data.pop("created_at", None)
+            new_strat = Strategy(**str_data, account_id=account_id)
+            s.add(new_strat)
+            s.flush()
+            if old_id:
+                st_objs_by_old_id[old_id] = new_strat
 
         # 1. Restore Trades
         for t_data in data.get("trades", []):
             old_id = t_data.pop("id", None)
-            t_data.pop("created_at", None)
-            t_data.pop("updated_at", None)
+            strategies_data = t_data.pop("strategies", [])
+            # Remove computed fields that are not in the DB model
+            for extra in ["pnl", "return_pct", "risk_reward", "duration_seconds", "created_at", "updated_at"]:
+                t_data.pop(extra, None)
+            
+            t_data["entry_date"] = parse_dt(t_data.get("entry_date"))
+            t_data["exit_date"] = parse_dt(t_data.get("exit_date"))
+            
             t = Trade(**t_data, account_id=account_id)
+            for st_info in strategies_data:
+                old_st_id = st_info.get("id")
+                if old_st_id in st_objs_by_old_id:
+                    t.strategies.append(st_objs_by_old_id[old_st_id])
             s.add(t)
             s.flush()
             if old_id:
@@ -1521,24 +1944,31 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
         # 2. Restore Assets
         for a_data in data.get("assets", []):
             a_data.pop("id", None)
-            a_data.pop("created_at", None)
-            a_data.pop("updated_at", None)
+            for extra in ["market_value", "cost_basis", "unrealized_pnl", "unrealized_pnl_pct", "created_at", "updated_at"]:
+                a_data.pop(extra, None)
+            a_data["updated_at"] = parse_dt(a_data.get("updated_at")) or datetime.utcnow()
             s.add(Asset(**a_data, account_id=account_id))
 
         # 3. Restore Cash Transactions
         for c_data in data.get("cash_transactions", []):
             c_data.pop("id", None)
-            old_tid = c_data.get("trade_id")
+            old_tid = c_data.pop("trade_id", None)
             if old_tid and old_tid in old_to_new_trade_id:
                 c_data["trade_id"] = old_to_new_trade_id[old_tid]
+            else:
+                c_data["trade_id"] = None
+            c_data["at"] = parse_dt(c_data.get("at")) or datetime.utcnow()
             s.add(CashTransaction(**c_data, account_id=account_id))
 
         # 4. Restore Psychology
         for p_data in data.get("psychology_entries", []):
             p_data.pop("id", None)
-            old_tid = p_data.get("trade_id")
+            old_tid = p_data.pop("trade_id", None)
             if old_tid and old_tid in old_to_new_trade_id:
                 p_data["trade_id"] = old_to_new_trade_id[old_tid]
+            else:
+                p_data["trade_id"] = None
+            p_data["at"] = parse_dt(p_data.get("at")) or datetime.utcnow()
             s.add(PsychologyEntry(**p_data, account_id=account_id))
 
         # 5. Restore Lessons
@@ -1546,11 +1976,13 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
             l_data.pop("id", None)
             l_data.pop("created_at", None)
             l_data.pop("updated_at", None)
-            old_tid = l_data.get("trade_id")
+            old_tid = l_data.pop("trade_id", None)
             if old_tid and old_tid in old_to_new_trade_id:
                 l_data["trade_id"] = old_to_new_trade_id[old_tid]
                 s.add(Lesson(**l_data))
+            # Note: Lessons without a valid trade_id are skipped to keep them account-specific via trades
 
+        s.commit()
         return {"status": "restored", "trades": len(old_to_new_trade_id)}
 
 
@@ -1758,19 +2190,6 @@ def insights(account_id: int = 1) -> dict:
                 "win_rate": (wins / count) if count else 0.0,
             }
 
-        longs = [t for t in closed if t.trade_type == TradeType.long]
-        shorts = [t for t in closed if t.trade_type == TradeType.short]
-        s_long = summarize(longs)
-        s_short = summarize(shorts)
-        if s_long["count"] >= 5 or s_short["count"] >= 5:
-            better = "Long" if s_long["avg"] >= s_short["avg"] else "Short"
-            insights_list.append(
-                {
-                    "title": f"You perform better in {better} trades",
-                    "severity": "info",
-                    "detail": f"Avg PnL — Long: {s_long['avg']:.2f} ({pct(s_long['win_rate'])}%), Short: {s_short['avg']:.2f} ({pct(s_short['win_rate'])}%).",
-                }
-            )
 
         # Strategy performance
         by_strategy: dict[str, list[float]] = {}
@@ -2193,6 +2612,8 @@ def get_fundamentals(symbol: str, refresh: bool = False):
                     'fundamental_score': m.fundamental_score,
                     'fetched_at': m.fetched_at,
                     'provider': m.provider,
+                    'company_name': m.company_name,
+                    'quote_type': m.quote_type,
                 }
 
         # Fetch / Refresh from provider
@@ -2224,6 +2645,8 @@ def get_fundamentals(symbol: str, refresh: bool = False):
                     'fundamental_score': m.fundamental_score,
                     'fetched_at': m.fetched_at,
                     'provider': m.provider,
+                    'company_name': m.company_name,
+                    'quote_type': m.quote_type,
                 }
             raise HTTPException(status_code=404, detail='No fundamentals data available')
         except HTTPException:
