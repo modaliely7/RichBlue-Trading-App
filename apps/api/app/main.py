@@ -154,7 +154,7 @@ def _to_trade_read(t: Trade) -> TradeRead:
         return_pct=calc_return_pct(t),
         risk_reward=calc_risk_reward(t),
         duration_seconds=calc_duration_seconds(t.entry_date, t.exit_date),
-        strategies=[_to_strategy_read(s) for s in t.strategies],
+        strategies=[_to_strategy_read(s) for s in {s.id: s for s in t.strategies}.values()],
     )
 
 
@@ -169,22 +169,6 @@ def health() -> dict:
 
 
 # --- ACCOUNTS ---
-
-@app.get("/analysis/technical/{symbol}")
-def get_technical(symbol: str, period: str = "1y", interval: str = "1d"):
-    with session_scope() as s:
-        # We could cache technicals here, but for now we always refresh or fetch recent
-        return refresh_technicals(s, symbol)
-
-@app.get("/analysis/quant/{symbol}")
-def get_quant(symbol: str, period: str = "6m", interval: str = "1d"):
-    with session_scope() as s:
-        return refresh_quant(s, symbol)
-
-@app.get("/analysis/smart-money/{symbol}")
-def get_smart_money(symbol: str, period: str = "6m", interval: str = "1d"):
-    with session_scope() as s:
-        return refresh_quant(s, symbol)
 
 @app.get("/accounts", response_model=list[AccountRead])
 def list_accounts():
@@ -1350,6 +1334,14 @@ def create_trade(payload: TradeCreate, account_id: int = 1) -> TradeRead:
                 trade=t,
             )
         s.refresh(t)
+        
+        # Update stock score
+        try:
+            from .scoring import update_stock_score
+            update_stock_score(s, t.symbol)
+        except Exception as e:
+            logger.error(f"Failed to update stock score for {t.symbol}: {e}")
+            
         return _to_trade_read(t)
 
 
@@ -1424,6 +1416,14 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         s.add(t)
         s.flush()
         s.refresh(t)
+        
+        # Update stock score
+        try:
+            from .scoring import update_stock_score
+            update_stock_score(s, t.symbol)
+        except Exception as e:
+            logger.error(f"Failed to update stock score for {t.symbol}: {e}")
+            
         return _to_trade_read(t)
 
 
@@ -1433,9 +1433,18 @@ def delete_trade(trade_id: int) -> dict:
         t = s.get(Trade, trade_id)
         if not t:
             raise HTTPException(status_code=404, detail="Trade not found")
-        # To maintain accurate cash balance, remove the cash transactions linked to this trade
+        sym = t.symbol
         s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
         s.delete(t)
+        s.flush()
+        
+        # Update stock score
+        try:
+            from .scoring import update_stock_score
+            update_stock_score(s, sym)
+        except Exception as e:
+            logger.error(f"Failed to update stock score for {sym}: {e}")
+            
         return {"deleted": True}
 
 def _parse_market(v: str | None) -> Market:
@@ -2713,3 +2722,32 @@ def get_smart_money(symbol: str, period: str = '6m', interval: str = '1d', refre
 def get_quant_live(symbol: str, period: str = '6m', interval: str = '1d', refresh: bool = False):
     """Alias for smart-money — live quantitative analysis by ticker symbol."""
     return get_smart_money(symbol=symbol, period=period, interval=interval, refresh=refresh)
+
+
+@app.get('/analysis/potential/{symbol}')
+def get_potential(symbol: str, duration: int = 365):
+    """Get potential ROI simulation for a symbol."""
+    from .simulator import calculate_potential
+    try:
+        return calculate_potential(symbol, duration)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get('/analysis/stock-score/{symbol}')
+def get_stock_score(symbol: str):
+    """Get the calculated quality score for a stock."""
+    from .models import StockScore
+    sym = symbol.strip().upper()
+    with session_scope() as s:
+        m = s.get(StockScore, sym)
+        if m:
+            return {
+                'symbol': m.symbol,
+                'score': m.score,
+                'personal_win_rate': m.personal_win_rate,
+                'personal_total_pnl': m.personal_total_pnl,
+                'personal_trade_count': m.personal_trade_count,
+                'last_updated': m.last_updated
+            }
+        return {'symbol': sym, 'score': 0, 'message': 'No score data yet'}

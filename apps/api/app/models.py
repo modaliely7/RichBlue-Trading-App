@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, Table, Column
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, Table, Column, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 
@@ -36,6 +36,7 @@ class Account(Base):
 
 class Strategy(Base):
     __tablename__ = "strategies"
+    __table_args__ = (UniqueConstraint("account_id", "name", name="uq_strategy_name"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
     name: Mapped[str] = mapped_column(String(64), index=True)
@@ -244,6 +245,26 @@ class QuantitativeMetrics(Base):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signal: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class StockScore(Base):
+    __tablename__ = "stock_scores"
+
+    symbol: Mapped[str] = mapped_column(String(32), primary_key=True)
+    
+    # Combined score (0-100)
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # User's personal history with this stock
+    personal_win_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    personal_total_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    personal_trade_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Market quality metrics
+    market_volatility: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_avg_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    
+    last_updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 

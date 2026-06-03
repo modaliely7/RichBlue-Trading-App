@@ -22,6 +22,7 @@ const sections = [
   {
     label: 'Analysis',
     items: [
+      { to: '/research', label: 'Stock Research', icon: '🔍' },
       { to: '/fundamentals', label: 'Fundamentals', icon: '🏢' },
       { to: '/technical', label: 'Technical Analysis', icon: '📉' },
       { to: '/smart-money', label: 'Smart Money', icon: '🐋' },

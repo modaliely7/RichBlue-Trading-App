@@ -74,6 +74,8 @@ type TradeDraft = {
   exit_date: string
   notes: string
   strategy_ids: number[]
+  indicators_used: string
+  lessons_learned: string
 }
 
 function tradeToDraft(t: Trade): TradeDraft {
@@ -89,7 +91,9 @@ function tradeToDraft(t: Trade): TradeDraft {
     entry_date: toDatetimeLocalValue(t.entry_date),
     exit_date: t.exit_date ? toDatetimeLocalValue(t.exit_date) : '',
     notes: t.notes || '',
-    strategy_ids: (t.strategies || []).map(s => s.id)
+    strategy_ids: (t.strategies || []).map(s => s.id),
+    indicators_used: t.indicators_used || '',
+    lessons_learned: t.lessons_learned || ''
   }
 }
 
@@ -338,9 +342,11 @@ export function JournalPage() {
         fees: evaluateEquation(draft.fees),
         exit_fees: evaluateEquation(draft.exit_fees),
         strategy_ids: draft.strategy_ids,
+        indicators_used: draft.indicators_used.trim() || null,
         entry_date: new Date(draft.entry_date).toISOString(),
         exit_date: draft.exit_date.trim() ? new Date(draft.exit_date).toISOString() : null,
         notes: draft.notes.trim() || null,
+        lessons_learned: draft.lessons_learned.trim() || null,
       },
     })
   }
@@ -368,7 +374,7 @@ export function JournalPage() {
         >
           All
         </span>
-        {allStrategies.map(s => (
+        {Array.from(new Map(allStrategies.map(s => [s.name.toUpperCase(), s])).values()).map(s => (
           <span 
             key={s.id} 
             className={`statusPill ${tradeSearch.toUpperCase() === s.name.toUpperCase() ? 'status-ok' : ''}`}
@@ -629,6 +635,10 @@ export function JournalPage() {
                     />
                   </label>
                   <label className="span2">
+                    <div className="label">Indicators Used</div>
+                    <input value={draft.indicators_used} onChange={(e) => setDraft({ ...draft, indicators_used: e.target.value })} placeholder="e.g. RSI, VWAP" />
+                  </label>
+                  <label className="span2">
                     <div className="label">Strategies</div>
                     <StrategySelect
                       selectedIds={draft.strategy_ids}
@@ -647,7 +657,11 @@ export function JournalPage() {
                   </label>
                   <label className="span2">
                     <div className="label">Notes</div>
-                    <textarea rows={3} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+                    <textarea rows={2} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+                  </label>
+                  <label className="span2">
+                    <div className="label">Lessons Learned</div>
+                    <textarea rows={2} value={draft.lessons_learned} onChange={(e) => setDraft({ ...draft, lessons_learned: e.target.value })} />
                   </label>
                   <div className="detailsActions span2" style={{ gridColumn: '1 / -1' }}>
                     <button type="button" className="btn" disabled={updateMutation.isPending} onClick={saveDraft}>

@@ -242,15 +242,14 @@ def fetch_price_history_yfinance(symbol: str, period: str = "1y", interval: str 
         except Exception:
             pass
             
-    if hist.empty and not symbol.endswith(".CA"):
+    if hist.empty and not symbol.endswith(".CA") and "." not in symbol:
+        logger.info(f"YFinance: Empty history for {symbol}, trying .CA suffix")
         tk_eg = yf.Ticker(symbol + ".CA")
-        for _ in range(3):
-            try:
-                hist = tk_eg.history(period=period, interval=interval, auto_adjust=False)
-                if not hist.empty:
-                    break
-            except Exception:
-                pass
+        hist = tk_eg.history(period=period, interval=interval)
+        if not hist.empty:
+            symbol = symbol + ".CA"
+            tk = tk_eg
+                
     rows: list[dict] = []
     if not hist.empty:
         for idx, row in hist.iterrows():

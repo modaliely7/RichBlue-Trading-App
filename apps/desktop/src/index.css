@@ -1,34 +1,34 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #060b17;
-  --bg2: #0a1020;
-  --panel: rgba(10, 18, 36, 0.75);
-  --panel2: rgba(14, 24, 46, 0.85);
-  --panel-hover: rgba(16, 28, 54, 0.9);
-  --text: #e2e8f0;
-  --text-strong: #f8fafc;
-  --muted: #64748b;
-  --muted2: #94a3b8;
-  --border: rgba(56, 189, 248, 0.12);
-  --border-strong: rgba(56, 189, 248, 0.35);
-  --accent: #0ea5e9;
-  --accent-dim: rgba(14, 165, 233, 0.15);
-  --accent-glow: rgba(14, 165, 233, 0.4);
-  --accent2: #10b981;
-  --accent2-glow: rgba(16, 185, 129, 0.35);
-  --danger: #f43f5e;
-  --danger-glow: rgba(244, 63, 94, 0.35);
-  --warn: #f59e0b;
-  --purple: #8b5cf6;
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --bg: #030712;
+  --bg2: #090e1a;
+  --panel: rgba(17, 24, 39, 0.7);
+  --panel2: rgba(31, 41, 55, 0.85);
+  --panel-hover: rgba(37, 51, 71, 0.9);
+  --text: #d1d5db;
+  --text-strong: #ffffff;
+  --muted: #6b7280;
+  --muted2: #9ca3af;
+  --border: rgba(59, 130, 246, 0.1);
+  --border-strong: rgba(59, 130, 246, 0.25);
+  --accent: #60a5fa;
+  --accent-dim: rgba(96, 165, 250, 0.1);
+  --accent-glow: rgba(96, 165, 250, 0.3);
+  --accent2: #34d399;
+  --accent2-glow: rgba(52, 211, 153, 0.2);
+  --danger: #f87171;
+  --danger-glow: rgba(248, 113, 113, 0.2);
+  --warn: #fbbf24;
+  --purple: #a78bfa;
+  --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
   --sans: 'Inter', system-ui, 'Segoe UI', sans-serif;
-  --radius: 14px;
-  --radius-sm: 8px;
-  --radius-lg: 20px;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-lg: 24px;
   color-scheme: dark;
   font: var(--ui-zoom, 100%) var(--sans);
   font-size: 14px;
@@ -571,16 +571,29 @@ body {
 /* ─── Cards & Panels ─────────────────────────────────── */
 .card {
   background: var(--panel);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent);
+  pointer-events: none;
 }
 
 .card:hover {
-  border-color: rgba(56, 189, 248, 0.2);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
 }
 
 .panel {
@@ -1386,4 +1399,39 @@ textarea:focus {
   background: var(--accent-dim);
   border-color: var(--accent) !important;
   box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.rangeBtn {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rangeBtn:hover {
+  background: var(--panel-hover);
+  border-color: var(--border-strong);
+}
+
+.rangeBtn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.metricRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.metricRow:last-child {
+  border-bottom: none;
 }

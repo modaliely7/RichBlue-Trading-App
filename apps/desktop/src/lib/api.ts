@@ -433,6 +433,12 @@ export const api = {
     const suffix = q.toString() ? `?${q.toString()}` : ''
     return apiFetch<any>(`/analysis/technical/${encodeURIComponent(symbol)}${suffix}`)
   },
+  potential: (symbol: string, duration: number = 365) => {
+    return apiFetch<any>(`/analysis/potential/${encodeURIComponent(symbol)}?duration=${duration}`)
+  },
+  stockScore: (symbol: string) => {
+    return apiFetch<any>(`/analysis/stock-score/${encodeURIComponent(symbol)}`)
+  },
 
   quantLive: (symbol: string, period: string = '6m', interval: string = '1d') => {
     const q = new URLSearchParams()

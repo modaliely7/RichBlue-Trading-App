@@ -1,0 +1,527 @@
+{
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\build.ps1": {
+    "mtime": 1778343663.0879738,
+    "ast_hash": "46cb77a064ea6068a78e7fd54f0d1bda",
+    "semantic_hash": "46cb77a064ea6068a78e7fd54f0d1bda"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\debug_txs.py": {
+    "mtime": 1776532856.5170858,
+    "ast_hash": "b9f4e98de80c95432b75bf2bc83c57a5",
+    "semantic_hash": "b9f4e98de80c95432b75bf2bc83c57a5"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\package.json": {
+    "mtime": 1776627263.9012117,
+    "ast_hash": "ab018a06585e0adb64d5f49e4a7a69ca",
+    "semantic_hash": "ab018a06585e0adb64d5f49e4a7a69ca"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\.vscode\\launch.json": {
+    "mtime": 1776509801.4513044,
+    "ast_hash": "8536c0b1b0a5a6da1637feed7ca91d43",
+    "semantic_hash": "8536c0b1b0a5a6da1637feed7ca91d43"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\package.json": {
+    "mtime": 1776616132.9881268,
+    "ast_hash": "2141e8570d14753a719a9151c98af68f",
+    "semantic_hash": "2141e8570d14753a719a9151c98af68f"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\run_api.py": {
+    "mtime": 1778345405.8530192,
+    "ast_hash": "81b9b7ee1d0a78fcf7c2f32bd3c63d7a",
+    "semantic_hash": "81b9b7ee1d0a78fcf7c2f32bd3c63d7a"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\alembic\\env.py": {
+    "mtime": 1776159261.2655416,
+    "ast_hash": "5fa9dcac819ba2991078ce4a0a9f9e6b",
+    "semantic_hash": "5fa9dcac819ba2991078ce4a0a9f9e6b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\alembic\\versions\\35140f73c090_initial_schema.py": {
+    "mtime": 1776445478.924345,
+    "ast_hash": "65e03b14f65792ae0838bc5773b98628",
+    "semantic_hash": "65e03b14f65792ae0838bc5773b98628"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\alembic\\versions\\e91980de81f2_add_is_active_to_account.py": {
+    "mtime": 1776627263.8363483,
+    "ast_hash": "a6cbde8f1186ca34445ffca0194d4bf9",
+    "semantic_hash": "a6cbde8f1186ca34445ffca0194d4bf9"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\analytics.py": {
+    "mtime": 1778411090.240962,
+    "ast_hash": "16311ed461108b84b7ea064f8c515ee1",
+    "semantic_hash": "16311ed461108b84b7ea064f8c515ee1"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\cli.py": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "5035299c602d24b67b256f90cad7fe80",
+    "semantic_hash": "5035299c602d24b67b256f90cad7fe80"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\data_providers.py": {
+    "mtime": 1778440919.1139264,
+    "ast_hash": "f62a7cac4829135b181c8ac11062dc1b",
+    "semantic_hash": "f62a7cac4829135b181c8ac11062dc1b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\db.py": {
+    "mtime": 1778342463.0724723,
+    "ast_hash": "a4415f3b697353146d1ad1e3faaa658e",
+    "semantic_hash": "a4415f3b697353146d1ad1e3faaa658e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\engine_quant.py": {
+    "mtime": 1776627263.837855,
+    "ast_hash": "df1a0688ebb2f30efec85a596db17ee9",
+    "semantic_hash": "df1a0688ebb2f30efec85a596db17ee9"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\engine_technicals.py": {
+    "mtime": 1776450252.3086343,
+    "ast_hash": "60de96ee13ea5128b86a184e0b23a09b",
+    "semantic_hash": "60de96ee13ea5128b86a184e0b23a09b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\fundamentals.py": {
+    "mtime": 1778329605.080027,
+    "ast_hash": "95d528ae49c30c35fa59b42607ef84d4",
+    "semantic_hash": "95d528ae49c30c35fa59b42607ef84d4"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\main.py": {
+    "mtime": 1778442318.113786,
+    "ast_hash": "cdc12f6744ba0f43e2641e822ec6171c",
+    "semantic_hash": "cdc12f6744ba0f43e2641e822ec6171c"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\models.py": {
+    "mtime": 1778443377.2373724,
+    "ast_hash": "c0514e77504bd55f063aa59680b8d75d",
+    "semantic_hash": "c0514e77504bd55f063aa59680b8d75d"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\portfolio_math.py": {
+    "mtime": 1778326393.8263812,
+    "ast_hash": "8c20a82dd8ba449b059ecb58d2ff8354",
+    "semantic_hash": "8c20a82dd8ba449b059ecb58d2ff8354"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\schemas.py": {
+    "mtime": 1778411071.1461415,
+    "ast_hash": "8bdb20bddb5bed487febbdca0bcda599",
+    "semantic_hash": "8bdb20bddb5bed487febbdca0bcda599"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\scoring.py": {
+    "mtime": 1778440889.5793521,
+    "ast_hash": "6ebeaa2ac402afe70349013f0244acc2",
+    "semantic_hash": "6ebeaa2ac402afe70349013f0244acc2"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\simulator.py": {
+    "mtime": 1778441267.4041402,
+    "ast_hash": "7e02d23c819ea9cb17e0fe44c9bc906b",
+    "semantic_hash": "7e02d23c819ea9cb17e0fe44c9bc906b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\app\\__init__.py": {
+    "mtime": 1776093921.0883074,
+    "ast_hash": "68b329da9893e34099c7d8ad5cb9c940",
+    "semantic_hash": "68b329da9893e34099c7d8ad5cb9c940"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_cash_endpoints.py": {
+    "mtime": 1776532900.8255088,
+    "ast_hash": "c1bc9ae37b9404f862d89d10ed3068ee",
+    "semantic_hash": "c1bc9ae37b9404f862d89d10ed3068ee"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_egx_scraper.py": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "bdc40774735abd7cf3aa7708f0b73a28",
+    "semantic_hash": "bdc40774735abd7cf3aa7708f0b73a28"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_fundamentals_scoring.py": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "b2d6d0fc4db9a98b6e5252ceccf772b5",
+    "semantic_hash": "b2d6d0fc4db9a98b6e5252ceccf772b5"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_investing_scraper.py": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "46e39178e38e61f7d52c59300db8d67f",
+    "semantic_hash": "46e39178e38e61f7d52c59300db8d67f"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_portfolio_math.py": {
+    "mtime": 1776627263.8496404,
+    "ast_hash": "cbc638d1de3d7033a701d63cf9423172",
+    "semantic_hash": "cbc638d1de3d7033a701d63cf9423172"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\tests\\test_tradingview_scraper.py": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "13618cbf0e9dae9c3184d1d499c3ead9",
+    "semantic_hash": "13618cbf0e9dae9c3184d1d499c3ead9"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\eslint.config.js": {
+    "mtime": 1776094514.0817966,
+    "ast_hash": "b8893da386a89dfd3672dad848f4ec7e",
+    "semantic_hash": "b8893da386a89dfd3672dad848f4ec7e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\package.json": {
+    "mtime": 1778344635.6074057,
+    "ast_hash": "0dab9994e779fe62d215cfc6c5769ef3",
+    "semantic_hash": "0dab9994e779fe62d215cfc6c5769ef3"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\tsconfig.app.json": {
+    "mtime": 1776094514.1784277,
+    "ast_hash": "b885d5f97cf6fc2c1e7997d4b8abfb88",
+    "semantic_hash": "b885d5f97cf6fc2c1e7997d4b8abfb88"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\tsconfig.json": {
+    "mtime": 1776094514.1935775,
+    "ast_hash": "a3d39fa780ebff65444de257f291ce6c",
+    "semantic_hash": "a3d39fa780ebff65444de257f291ce6c"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\tsconfig.node.json": {
+    "mtime": 1776094514.2079563,
+    "ast_hash": "70bdd0a673bcfc0e828080b306e7c680",
+    "semantic_hash": "70bdd0a673bcfc0e828080b306e7c680"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\vite.config.ts": {
+    "mtime": 1778413904.0217483,
+    "ast_hash": "37675907d920f8cc4d2f74b1075c3364",
+    "semantic_hash": "37675907d920f8cc4d2f74b1075c3364"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\App.tsx": {
+    "mtime": 1778441151.9985147,
+    "ast_hash": "2198fca50c302629e853d43127dfbef6",
+    "semantic_hash": "2198fca50c302629e853d43127dfbef6"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\main.tsx": {
+    "mtime": 1778415205.68916,
+    "ast_hash": "c3bac238a909f975f4f84f9006a14595",
+    "semantic_hash": "c3bac238a909f975f4f84f9006a14595"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\components\\AccountContext.tsx": {
+    "mtime": 1776510260.483121,
+    "ast_hash": "5018a0791be8a50ef1a085596c8313ef",
+    "semantic_hash": "5018a0791be8a50ef1a085596c8313ef"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\components\\KpiCard.tsx": {
+    "mtime": 1776503578.9580395,
+    "ast_hash": "30d55bf7cf899988334980bc65b0e7e4",
+    "semantic_hash": "30d55bf7cf899988334980bc65b0e7e4"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\components\\OverviewSyncBar.tsx": {
+    "mtime": 1777459682.6862082,
+    "ast_hash": "f059aa4eaffb293f01d2ce681320d165",
+    "semantic_hash": "f059aa4eaffb293f01d2ce681320d165"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\components\\Sidebar.tsx": {
+    "mtime": 1778441164.3405237,
+    "ast_hash": "2100294dfa8552da5665bf60f254d248",
+    "semantic_hash": "2100294dfa8552da5665bf60f254d248"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\components\\StrategySelect.tsx": {
+    "mtime": 1778443480.3574266,
+    "ast_hash": "6e2267cd76722c69afdb2e651161c680",
+    "semantic_hash": "6e2267cd76722c69afdb2e651161c680"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\lib\\api.ts": {
+    "mtime": 1778441125.156633,
+    "ast_hash": "9f304c34d82510e24397f37bf580abf5",
+    "semantic_hash": "9f304c34d82510e24397f37bf580abf5"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\lib\\charts.ts": {
+    "mtime": 1776627263.852636,
+    "ast_hash": "c5b77eace6878ae92404d5b13f925d8b",
+    "semantic_hash": "c5b77eace6878ae92404d5b13f925d8b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\lib\\format.ts": {
+    "mtime": 1778247224.5470128,
+    "ast_hash": "b031acce36540243ed3a88739cc19034",
+    "semantic_hash": "b031acce36540243ed3a88739cc19034"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\AddTradePage.tsx": {
+    "mtime": 1778442560.5262496,
+    "ast_hash": "e68bb6bd61a75995260f5d0530123e75",
+    "semantic_hash": "e68bb6bd61a75995260f5d0530123e75"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\AnalyticsPage.tsx": {
+    "mtime": 1778349589.7003398,
+    "ast_hash": "72e0f773e9844ad88f5abbaa27beed7e",
+    "semantic_hash": "72e0f773e9844ad88f5abbaa27beed7e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\CalculatorsPage.tsx": {
+    "mtime": 1778343971.7982943,
+    "ast_hash": "040f1ae0523e96406625a4e357aafb46",
+    "semantic_hash": "040f1ae0523e96406625a4e357aafb46"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\CalendarPage.tsx": {
+    "mtime": 1778410062.5689957,
+    "ast_hash": "876ee9624c2890aa7c60ab4d3033ea68",
+    "semantic_hash": "876ee9624c2890aa7c60ab4d3033ea68"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\CashPage.tsx": {
+    "mtime": 1778326282.1532593,
+    "ast_hash": "3fa4837ecadd91bd7fbb039d31a5c5e1",
+    "semantic_hash": "3fa4837ecadd91bd7fbb039d31a5c5e1"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\DashboardPage.tsx": {
+    "mtime": 1778349816.4742799,
+    "ast_hash": "b760bfb26a5138d8418e4c5924a7e363",
+    "semantic_hash": "b760bfb26a5138d8418e4c5924a7e363"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\DataPage.tsx": {
+    "mtime": 1778348069.5529451,
+    "ast_hash": "7e759bfef543d87a48dd9999164b9f46",
+    "semantic_hash": "7e759bfef543d87a48dd9999164b9f46"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\JournalPage.tsx": {
+    "mtime": 1778443422.1909628,
+    "ast_hash": "748745cd47ef0aab35ac74230a73def8",
+    "semantic_hash": "748745cd47ef0aab35ac74230a73def8"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\LessonsPage.tsx": {
+    "mtime": 1776630516.34086,
+    "ast_hash": "da79ce9043ced6bc3ba28ef6956483fe",
+    "semantic_hash": "da79ce9043ced6bc3ba28ef6956483fe"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\PortfolioPage.tsx": {
+    "mtime": 1778324917.8542452,
+    "ast_hash": "2358ba05b5b5a7d5166163d6172051fb",
+    "semantic_hash": "2358ba05b5b5a7d5166163d6172051fb"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\PsychologyPage.tsx": {
+    "mtime": 1776627151.1045828,
+    "ast_hash": "b785523030828680f6569645d02715c3",
+    "semantic_hash": "b785523030828680f6569645d02715c3"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\QuantPage.tsx": {
+    "mtime": 1776627263.8561485,
+    "ast_hash": "7da4a1e0fea5614cda835e9eaa5f2b9a",
+    "semantic_hash": "7da4a1e0fea5614cda835e9eaa5f2b9a"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\SettingsPage.tsx": {
+    "mtime": 1778416874.969736,
+    "ast_hash": "407dcb6734e571f9c0686f5bb8c3df4e",
+    "semantic_hash": "407dcb6734e571f9c0686f5bb8c3df4e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\SmartMoneyPage.tsx": {
+    "mtime": 1776627263.8571482,
+    "ast_hash": "c835dca8e3e6245f8dc0588886f9e681",
+    "semantic_hash": "c835dca8e3e6245f8dc0588886f9e681"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\StockFundamentalsPage.tsx": {
+    "mtime": 1776627263.8571482,
+    "ast_hash": "e3fb2de907c9f618d5bae78e013ed393",
+    "semantic_hash": "e3fb2de907c9f618d5bae78e013ed393"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\StockResearchPage.tsx": {
+    "mtime": 1778441143.2686515,
+    "ast_hash": "6bd4b76952af35fc14797182703658f1",
+    "semantic_hash": "6bd4b76952af35fc14797182703658f1"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\StrategiesPage.tsx": {
+    "mtime": 1778348463.3182135,
+    "ast_hash": "d8c106a7eba1bc4b99351a8f9facbafd",
+    "semantic_hash": "d8c106a7eba1bc4b99351a8f9facbafd"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\SymbolsPage.tsx": {
+    "mtime": 1777458003.9894385,
+    "ast_hash": "eeac5c2c40b7130faa0b1fbdc305362f",
+    "semantic_hash": "eeac5c2c40b7130faa0b1fbdc305362f"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\pages\\TechnicalAnalysisPage.tsx": {
+    "mtime": 1776627263.8581488,
+    "ast_hash": "6b71b9757ce940caecd32516f764c3fa",
+    "semantic_hash": "6b71b9757ce940caecd32516f764c3fa"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\scratch\\test_api.py": {
+    "mtime": 1778441316.0364196,
+    "ast_hash": "998d978382c3651f9091d05e4f373db9",
+    "semantic_hash": "998d978382c3651f9091d05e4f373db9"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\scratch\\test_egx.py": {
+    "mtime": 1778440839.5172691,
+    "ast_hash": "7e4fbc60920c8b9a493300863bb88596",
+    "semantic_hash": "7e4fbc60920c8b9a493300863bb88596"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\scratch\\test_yf.py": {
+    "mtime": 1778329387.1815355,
+    "ast_hash": "87b74607768e6673d16c8e87e5b82a3b",
+    "semantic_hash": "87b74607768e6673d16c8e87e5b82a3b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\scripts\\package_app.ps1": {
+    "mtime": 1778348653.4515185,
+    "ast_hash": "be3ba5e57c30479c2b8fe83ec445842a",
+    "semantic_hash": "be3ba5e57c30479c2b8fe83ec445842a"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\AGENTS.md": {
+    "mtime": 1780506025.6608748,
+    "ast_hash": "2fd3a5d4df6f8afbd58fb691e042afba",
+    "semantic_hash": "2fd3a5d4df6f8afbd58fb691e042afba"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\AI_INSTRUCTIONS.md": {
+    "mtime": 1778416983.4947524,
+    "ast_hash": "4e23c54e997932a0f925d605c115c96e",
+    "semantic_hash": "4e23c54e997932a0f925d605c115c96e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\README.md": {
+    "mtime": 1778416571.9812546,
+    "ast_hash": "4b64fbe24cc9137a0c789920267b1828",
+    "semantic_hash": "4b64fbe24cc9137a0c789920267b1828"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\README.md": {
+    "mtime": 1776182686.1221738,
+    "ast_hash": "6bab1bdabcaa0dfdebd830bbeebdc50c",
+    "semantic_hash": "6bab1bdabcaa0dfdebd830bbeebdc50c"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\requirements.txt": {
+    "mtime": 1778327914.89363,
+    "ast_hash": "9424335876f0f5fb0de6a7b84bcd3e3d",
+    "semantic_hash": "9424335876f0f5fb0de6a7b84bcd3e3d"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\test_out.txt": {
+    "mtime": 1776532824.21535,
+    "ast_hash": "cd3a4eea8afe038bef4c9b152ca27b84",
+    "semantic_hash": "cd3a4eea8afe038bef4c9b152ca27b84"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\test_output.txt": {
+    "mtime": 1776531596.554308,
+    "ast_hash": "ef54eaf1ca0bdfaf47749081984bb1dd",
+    "semantic_hash": "ef54eaf1ca0bdfaf47749081984bb1dd"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\index.html": {
+    "mtime": 1776627263.8506382,
+    "ast_hash": "d1df78849b234f9b844ca0d011d8c058",
+    "semantic_hash": "d1df78849b234f9b844ca0d011d8c058"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\README.md": {
+    "mtime": 1776094514.2427518,
+    "ast_hash": "f6e3faf55d738cf2affe1b44195f27cf",
+    "semantic_hash": "f6e3faf55d738cf2affe1b44195f27cf"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Implementation\\1. Implementation_5_2026.md": {
+    "mtime": 1778441891.053934,
+    "ast_hash": "a120400da93e0ee45ae187515eafd79b",
+    "semantic_hash": "a120400da93e0ee45ae187515eafd79b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Notes\\APP_BLUEPRINT.md": {
+    "mtime": 1776627263.8310955,
+    "ast_hash": "3ad52ebbfdeeccf9c402f36762789937",
+    "semantic_hash": "3ad52ebbfdeeccf9c402f36762789937"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Notes\\HISTORY.md": {
+    "mtime": 1776627263.8317914,
+    "ast_hash": "d42d384cab5773d570b1106fa23f70cc",
+    "semantic_hash": "d42d384cab5773d570b1106fa23f70cc"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Notes\\OLD\\implementation_plan.md": {
+    "mtime": 1776627263.8317914,
+    "ast_hash": "2c7361994e326f7938314abebb847a6f",
+    "semantic_hash": "2c7361994e326f7938314abebb847a6f"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Notes\\OLD\\task.md": {
+    "mtime": 1776627263.832801,
+    "ast_hash": "166881a3e6053dc3c16fddc14f1481dc",
+    "semantic_hash": "166881a3e6053dc3c16fddc14f1481dc"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\media\\screenshots\\3_04c33403d2d54a00a3f9a835e9a82c23.png": {
+    "mtime": 1776117295.5487678,
+    "ast_hash": "2299b51416aa56e1009a444ef8d6a636",
+    "semantic_hash": "2299b51416aa56e1009a444ef8d6a636"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\media\\screenshots\\5_6df3f21897be41f98c171a50622bf97d.jpg": {
+    "mtime": 1776100986.7485836,
+    "ast_hash": "cbb98bf9097ab6dc0fab55805855bc21",
+    "semantic_hash": "cbb98bf9097ab6dc0fab55805855bc21"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\media\\screenshots\\5_f07b94023d4b47339f626cdd53392b5c.jpg": {
+    "mtime": 1776100982.303583,
+    "ast_hash": "68076292ac241f7116c0d942136c5fa0",
+    "semantic_hash": "68076292ac241f7116c0d942136c5fa0"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\api\\media\\screenshots\\8_3bfada3482ae4531a388dfde28d0b867.jpg": {
+    "mtime": 1776104024.4272592,
+    "ast_hash": "d6b6ae71f53fd8002903950a77791f6a",
+    "semantic_hash": "d6b6ae71f53fd8002903950a77791f6a"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\public\\favicon.svg": {
+    "mtime": 1776094514.8544164,
+    "ast_hash": "7e840862161341271697daa99a40d76b",
+    "semantic_hash": "7e840862161341271697daa99a40d76b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\public\\icons.svg": {
+    "mtime": 1776094515.0353012,
+    "ast_hash": "3b4fcfcf393eca4d264dca4a4663bc37",
+    "semantic_hash": "3b4fcfcf393eca4d264dca4a4663bc37"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\assets\\hero.png": {
+    "mtime": 1776094514.4077837,
+    "ast_hash": "5cf2b0762834cdddc0dd3ec1397b5011",
+    "semantic_hash": "5cf2b0762834cdddc0dd3ec1397b5011"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\assets\\react.svg": {
+    "mtime": 1776094515.1512856,
+    "ast_hash": "f0402b67b6ce880f65666bb49e841696",
+    "semantic_hash": "f0402b67b6ce880f65666bb49e841696"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\apps\\desktop\\src\\assets\\vite.svg": {
+    "mtime": 1776094515.2147088,
+    "ast_hash": "9960a24288958394ac50e57ff638b036",
+    "semantic_hash": "9960a24288958394ac50e57ff638b036"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\ai_coach.png": {
+    "mtime": 1776627263.862178,
+    "ast_hash": "41b7aa29f8e185bba6512f441486b47c",
+    "semantic_hash": "41b7aa29f8e185bba6512f441486b47c"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\analytics.png": {
+    "mtime": 1776627263.865264,
+    "ast_hash": "819485bf2a307c1971f89955eaa87974",
+    "semantic_hash": "819485bf2a307c1971f89955eaa87974"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\calendar.png": {
+    "mtime": 1776627263.8685043,
+    "ast_hash": "9f329c943a84d5299730e457d8170918",
+    "semantic_hash": "9f329c943a84d5299730e457d8170918"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\cash.png": {
+    "mtime": 1776627263.87203,
+    "ast_hash": "4bbab3484b7e1d8c63e71e669a75f980",
+    "semantic_hash": "4bbab3484b7e1d8c63e71e669a75f980"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\dashboard.png": {
+    "mtime": 1776629729.16244,
+    "ast_hash": "89601ca00c22d780b5e0f941e6621137",
+    "semantic_hash": "89601ca00c22d780b5e0f941e6621137"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\fundamentals.png": {
+    "mtime": 1776627263.8765917,
+    "ast_hash": "79cbea9ee031bcb12d7229815fe7f41b",
+    "semantic_hash": "79cbea9ee031bcb12d7229815fe7f41b"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\portfolio.png": {
+    "mtime": 1776627263.8787074,
+    "ast_hash": "9ef51bce7c53e8e386e700c6d659139f",
+    "semantic_hash": "9ef51bce7c53e8e386e700c6d659139f"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\risk.png": {
+    "mtime": 1776627263.8827488,
+    "ast_hash": "4f7ece9dcf536be28e14b5df3bb51ddd",
+    "semantic_hash": "4f7ece9dcf536be28e14b5df3bb51ddd"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\settings.png": {
+    "mtime": 1776627263.8852913,
+    "ast_hash": "3fc80c5c865902b7131785f5a9980960",
+    "semantic_hash": "3fc80c5c865902b7131785f5a9980960"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\smart_money.png": {
+    "mtime": 1776627263.8878381,
+    "ast_hash": "529bd9916daa751a355fc4c29d4d001a",
+    "semantic_hash": "529bd9916daa751a355fc4c29d4d001a"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\symbols.png": {
+    "mtime": 1776627263.8918438,
+    "ast_hash": "6855b4962980dd71f45968bfd228443e",
+    "semantic_hash": "6855b4962980dd71f45968bfd228443e"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\technical.png": {
+    "mtime": 1776627263.8961024,
+    "ast_hash": "d5c8115268eb20e5fd0b4f47b07466f7",
+    "semantic_hash": "d5c8115268eb20e5fd0b4f47b07466f7"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\media\\trades.png": {
+    "mtime": 1776627263.8981006,
+    "ast_hash": "42eebe2c35cfb44377ebe48236382960",
+    "semantic_hash": "42eebe2c35cfb44377ebe48236382960"
+  },
+  "D:\\WorkSpace\\programming\\Projects\\Trading Journal\\Notes\\Theme2.jpeg": {
+    "mtime": 1776627263.835341,
+    "ast_hash": "87a244e2469eaca22e7c7438c530783d",
+    "semantic_hash": "87a244e2469eaca22e7c7438c530783d"
+  }
+}

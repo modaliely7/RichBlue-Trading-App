@@ -16,6 +16,7 @@ import { CashPage } from './pages/CashPage'
 import { StrategiesPage } from './pages/StrategiesPage'
 import { AddTradePage } from './pages/AddTradePage'
 import { DataPage } from './pages/DataPage'
+import { StockResearchPage } from './pages/StockResearchPage'
 
 export default function App() {
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/strategies" element={<StrategiesPage />} />
           <Route path="/trades/add" element={<AddTradePage />} />
           <Route path="/data" element={<DataPage />} />
+          <Route path="/research" element={<StockResearchPage />} />
           <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

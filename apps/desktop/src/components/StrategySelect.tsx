@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { type Strategy } from '../lib/api'
 
 export function StrategySelect({
@@ -14,12 +14,23 @@ export function StrategySelect({
 }) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  const filtered = allStrategies.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
-  const selected = allStrategies.filter(s => selectedIds.includes(s.id))
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Deduplicate options by name for the dropdown
+  const uniqueFiltered = Array.from(new Map(filtered.map(s => [s.name.toLowerCase(), s])).values())
 
   return (
-    <div className="strategySelect" style={{ position: 'relative' }}>
+    <div className="strategySelect" ref={containerRef} style={{ position: 'relative' }}>
       <div className="tagList" onClick={() => setIsOpen(!isOpen)} style={{ minHeight: 42, padding: '4px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', flexWrap: 'wrap', gap: 4, cursor: 'text' }}>
         {selected.map(s => (
           <span key={s.id} className="statusPill" style={{ background: s.color || 'var(--accent-dim)', display: 'flex', alignItems: 'center', gap: 6, border: 'none', color: 'var(--text-strong)' }}>
@@ -37,7 +48,7 @@ export function StrategySelect({
       </div>
       {isOpen && (
         <div className="strategyDropdown card" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: 'var(--panel)' }}>
-          {filtered.map(s => (
+          {uniqueFiltered.map(s => (
             <div
               key={s.id}
               className="strategyOption"
