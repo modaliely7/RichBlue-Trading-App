@@ -2152,3 +2152,489 @@ textarea:focus {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ─── Settings Page ────────────────────────────────────── */
+.settingsShell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 32px;
+  min-height: 600px;
+}
+
+.settingsNav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settingsNavItem {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: var(--text);
+  font-family: inherit;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settingsNavItem:hover {
+  background: var(--panel-hover);
+}
+
+.settingsNavItem.active {
+  background: var(--panel2);
+  border-color: var(--border);
+  transform: scale(1.02);
+}
+
+.settingsNavIcon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border-radius: var(--radius-md);
+  font-size: 22px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.settingsNavItem.active .settingsNavIcon {
+  background: var(--bg);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.settingsNavText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settingsNavTitle {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.settingsNavItem.active .settingsNavTitle {
+  color: var(--text-strong);
+}
+
+.settingsNavDesc {
+  font-size: 12px;
+  color: var(--muted2);
+}
+
+.settingsContent {
+  padding: 40px;
+}
+
+.sectionHeader {
+  margin-bottom: 32px;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.sectionHeader p {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+
+.accountList {
+  display: grid;
+  gap: 16px;
+}
+
+.accountItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.accountInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.accountAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.accountName {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text-strong);
+}
+
+.accountMeta {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.accountActions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.dottedAddBtn {
+  padding: 20px 24px;
+  border: 2px dashed var(--border);
+  background: transparent;
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  font-family: inherit;
+}
+
+.dottedAddBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.addAccountBox {
+  padding: 24px;
+  background: var(--panel2);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+}
+
+.limitNote {
+  text-align: center;
+  padding: 20px;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+
+.formRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.formRow .input {
+  flex: 1;
+}
+
+.strategyTable th,
+.strategyTable td {
+  padding: 16px 20px;
+}
+
+.strategyTable th {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.colorInput {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.colorTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 20px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.colorTagSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.colorTagHex {
+  font-family: var(--mono, monospace);
+  color: var(--muted2);
+}
+
+.emptyRow td {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted2);
+}
+
+.dataGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.dataCard {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.dataCard.full {
+  grid-column: 1 / -1;
+}
+
+.dataCard.danger {
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dataCard.danger .dataCardTitle {
+  color: var(--danger);
+}
+
+.dataCard.danger .dataCardDesc {
+  color: var(--danger);
+  opacity: 0.85;
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.dataCardIcon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+
+.dataCardTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-strong);
+}
+
+.dataCardDesc {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.uploadLabel {
+  display: block;
+  text-align: center;
+  padding: 12px;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius);
+  font-weight: 500;
+  background: transparent;
+  width: 100%;
+}
+
+.uploadLabel input[type="file"] {
+  display: none;
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.themeCard {
+  background: var(--bg);
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  border: 2px solid var(--border);
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.themeCard:hover {
+  border-color: var(--border-strong);
+}
+
+.themeCard.active {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.themePreview {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.themePreview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 50%;
+}
+
+.themeDot {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.themeCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.zoomPanel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+.zoomHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.zoomHeader h3 {
+  font-weight: 700;
+  font-size: 18px;
+  margin: 0 0 4px;
+  color: var(--text-strong);
+}
+
+.zoomHeader p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.zoomIcon {
+  font-size: 32px;
+}
+
+.zoomControls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.zoomControls input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.zoomReset {
+  margin-top: 24px;
+}
+
+.tipBar {
+  margin-top: 32px;
+  padding: 16px;
+  background: var(--panel2);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.tipBar p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted2);
+}
+
+.bannerStack {
+  margin-bottom: 20px;
+  animation: slideIn 0.3s ease;
+}
+
+.banner {
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border-left: 4px solid;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.banner.success {
+  border-color: var(--accent2);
+  background: var(--accent2-dim);
+  color: var(--text);
+}
+
+.banner.danger {
+  border-color: var(--danger);
+  background: var(--danger-dim);
+  color: var(--text);
+}
+
+.bannerIcon {
+  font-size: 18px;
+}
+
+.tabSection {
+  animation: slideIn 0.3s ease;
+}
