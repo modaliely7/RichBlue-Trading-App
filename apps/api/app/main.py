@@ -40,18 +40,13 @@ from .portfolio_math import (
     open_stocks_market_value_for_day,
     trade_open_on_day,
 )
-from .engine_quant import refresh_quant
-from .engine_technicals import refresh_technicals
 from .models import (
     Account,
     AccountType,
     Asset,
     AssetClass,
     Base,
-    StockRawData,
     PriceHistory,
-    StockMetrics,
-    SmartMoneySignal,
     CashTransaction,
     CashTxType,
     Lesson,
@@ -94,10 +89,10 @@ from .schemas import (
     StrategyCreate,
     StrategyUpdate,
 )
-from .data_providers import fetch_price_and_fundamentals_yfinance, fetch_price_history_yfinance, fetch_fallback
+from .symbol_lookup import lookup_symbol
 import json
 
-app = FastAPI(title="Trading Analytics API", version="0.1.0")
+app = FastAPI(title="Trading Journal API", version="0.1.0")
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +188,7 @@ def create_account(req: AccountCreate):
         active_count = s.execute(select(func.count()).where(Account.is_active == True)).scalar_one()
         if active_count >= 3:
             raise HTTPException(status_code=400, detail="Maximum of 3 accounts allowed.")
-        acc = Account(name=req.name, account_type=AccountType.real)
+        acc = Account(name=req.name, account_type=req.account_type)
         s.add(acc)
         s.commit()
         s.refresh(acc)
@@ -545,11 +540,11 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
         # Color PnL column
         for i, row_data in enumerate(table_data[1:], 1):
             try:
-                pnl_val = float(row_data[4])
+                pnl_val = float(row_data[3])
                 if pnl_val > 0:
-                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#10b981"))]))
+                    t.setStyle(TableStyle([('TEXTCOLOR', (3, i), (3, i), colors.HexColor("#10b981"))]))
                 elif pnl_val < 0:
-                    t.setStyle(TableStyle([('TEXTCOLOR', (4, i), (4, i), colors.HexColor("#f43f5e"))]))
+                    t.setStyle(TableStyle([('TEXTCOLOR', (3, i), (3, i), colors.HexColor("#f43f5e"))]))
             except:
                 pass
 
@@ -673,6 +668,7 @@ def list_trades(account_id: int = 1, limit: int = 200, offset: int = 0) -> list[
         rows = s.execute(
             select(Trade)
             .where(Trade.account_id == account_id)
+            .options(selectinload(Trade.strategies))
             .order_by(Trade.entry_date.desc())
             .limit(limit)
             .offset(offset)
@@ -1065,23 +1061,6 @@ def cash_balance(account_id: int = 1) -> CashBalanceResponse:
         return CashBalanceResponse(balance=_cash_balance(s, account_id))
 
 
-@app.post("/cash/dividend")
-def add_dividend(req: DividendRequest, account_id: int = 1):
-    with session_scope() as s:
-        at = req.at or datetime.now(UTC)
-        note = req.note or f"Dividend for {req.symbol}"
-        tx = _add_cash_tx(
-            s,
-            account_id=account_id,
-            amount=req.amount,
-            tx_type=CashTxType.dividend,
-            at=at,
-            note=note
-        )
-        tx.symbol = req.symbol
-        s.commit()
-        return {"ok": True, "balance": _cash_balance(s, account_id)}
-
 @app.post("/trades/{trade_id}/dividend")
 def add_trade_dividend(trade_id: int, payload: DividendRequest, account_id: int = 1):
     with session_scope() as s:
@@ -1334,14 +1313,7 @@ def create_trade(payload: TradeCreate, account_id: int = 1) -> TradeRead:
                 trade=t,
             )
         s.refresh(t)
-        
-        # Update stock score
-        try:
-            from .scoring import update_stock_score
-            update_stock_score(s, t.symbol)
-        except Exception as e:
-            logger.error(f"Failed to update stock score for {t.symbol}: {e}")
-            
+
         return _to_trade_read(t)
 
 
@@ -1416,14 +1388,7 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         s.add(t)
         s.flush()
         s.refresh(t)
-        
-        # Update stock score
-        try:
-            from .scoring import update_stock_score
-            update_stock_score(s, t.symbol)
-        except Exception as e:
-            logger.error(f"Failed to update stock score for {t.symbol}: {e}")
-            
+
         return _to_trade_read(t)
 
 
@@ -1437,14 +1402,7 @@ def delete_trade(trade_id: int) -> dict:
         s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
         s.delete(t)
         s.flush()
-        
-        # Update stock score
-        try:
-            from .scoring import update_stock_score
-            update_stock_score(s, sym)
-        except Exception as e:
-            logger.error(f"Failed to update stock score for {sym}: {e}")
-            
+
         return {"deleted": True}
 
 def _parse_market(v: str | None) -> Market:
@@ -1482,230 +1440,6 @@ def _parse_dt(v: str | None) -> datetime | None:
     # Accept ISO 8601
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
-
-def _refresh_fundamentals(session, symbol: str) -> dict:
-    try:
-        from .fundamentals import refresh_fundamentals as _refresh
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal error preparing fundamentals refresh: {e}")
-    try:
-        return _refresh(session, symbol)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def _compute_technical_indicators(symbol: str, period: str = "1y", interval: str = "1d") -> dict:
-    """Best-effort technical indicators from price history (SMA/EMA/MACD/RSI/ATR/Bollinger/OBV/VWAP).
-
-    Returns a dict with `series` (list of daily points with indicators), `latest` (last row), and `summary`.
-    """
-    sym = (symbol or "").strip().upper()
-    if not sym:
-        raise HTTPException(status_code=400, detail="Invalid symbol")
-    hist = fetch_price_history_yfinance(sym, period=period, interval=interval)
-    if not hist:
-        return {"symbol": sym, "series": [], "latest": {}, "summary": {}}
-
-    df = pd.DataFrame(hist)
-    if df.empty:
-        return {"symbol": sym, "series": [], "latest": {}, "summary": {}}
-    df.sort_values("at", inplace=True)
-    df = df.reset_index(drop=True)
-
-    # ensure numeric types
-    for c in ["open", "high", "low", "close", "volume"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-
-    # Moving averages
-    df["sma20"] = df["close"].rolling(20, min_periods=1).mean()
-    df["sma50"] = df["close"].rolling(50, min_periods=1).mean()
-    df["sma200"] = df["close"].rolling(200, min_periods=1).mean()
-
-    # EMAs and MACD
-    df["ema12"] = df["close"].ewm(span=12, adjust=False).mean()
-    df["ema26"] = df["close"].ewm(span=26, adjust=False).mean()
-    df["macd"] = df["ema12"] - df["ema26"]
-    df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
-
-    # RSI (14)
-    delta = df["close"].diff()
-    up = delta.clip(lower=0)
-    down = -1 * delta.clip(upper=0)
-    roll_up = up.rolling(14, min_periods=1).mean()
-    roll_down = down.rolling(14, min_periods=1).mean()
-    rs = roll_up / roll_down.replace(0, pd.NA)
-    df["rsi14"] = 100.0 - (100.0 / (1.0 + rs))
-
-    # ATR (14)
-    prev_close = df["close"].shift(1)
-    tr1 = df["high"] - df["low"]
-    tr2 = (df["high"] - prev_close).abs()
-    tr3 = (df["low"] - prev_close).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    df["atr14"] = tr.rolling(14, min_periods=1).mean()
-
-    # Bollinger Bands
-    df["bb_mid"] = df["close"].rolling(20, min_periods=1).mean()
-    df["bb_std"] = df["close"].rolling(20, min_periods=1).std().fillna(0.0)
-    df["bb_upper"] = df["bb_mid"] + 2 * df["bb_std"]
-    df["bb_lower"] = df["bb_mid"] - 2 * df["bb_std"]
-
-    # OBV
-    df["obv"] = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
-
-    # VWAP (cumulative)
-    vol_cum = df["volume"].cumsum().replace(0, pd.NA)
-    df["vwap"] = (df["close"] * df["volume"]).cumsum() / vol_cum
-
-    # Build serializable series
-    series = []
-    for _, r in df.iterrows():
-        series.append(
-            {
-                "at": r["at"].isoformat() if hasattr(r["at"], "isoformat") else str(r["at"]),
-                "open": float(r["open"]),
-                "high": float(r["high"]),
-                "low": float(r["low"]),
-                "close": float(r["close"]),
-                "volume": float(r["volume"]),
-                "sma20": None if pd.isna(r.get("sma20")) else float(r.get("sma20")),
-                "sma50": None if pd.isna(r.get("sma50")) else float(r.get("sma50")),
-                "sma200": None if pd.isna(r.get("sma200")) else float(r.get("sma200")),
-                "ema12": None if pd.isna(r.get("ema12")) else float(r.get("ema12")),
-                "ema26": None if pd.isna(r.get("ema26")) else float(r.get("ema26")),
-                "macd": None if pd.isna(r.get("macd")) else float(r.get("macd")),
-                "macd_signal": None if pd.isna(r.get("macd_signal")) else float(r.get("macd_signal")),
-                "rsi14": None if pd.isna(r.get("rsi14")) else float(r.get("rsi14")),
-                "atr14": None if pd.isna(r.get("atr14")) else float(r.get("atr14")),
-                "bb_upper": None if pd.isna(r.get("bb_upper")) else float(r.get("bb_upper")),
-                "bb_lower": None if pd.isna(r.get("bb_lower")) else float(r.get("bb_lower")),
-                "obv": None if pd.isna(r.get("obv")) else float(r.get("obv")),
-                "vwap": None if pd.isna(r.get("vwap")) else float(r.get("vwap")),
-            }
-        )
-
-    latest = series[-1] if series else {}
-    summary: dict = {}
-    try:
-        last = df.iloc[-1]
-        summary["sma_crossover"] = "bull" if last.get("sma20") > last.get("sma50") else (
-            "bear" if last.get("sma20") < last.get("sma50") else "neutral"
-        )
-        summary["macd_bullish"] = None if pd.isna(last.get("macd")) or pd.isna(last.get("macd_signal")) else (
-            bool(last.get("macd") > last.get("macd_signal"))
-        )
-        summary["rsi"] = None if pd.isna(last.get("rsi14")) else float(last.get("rsi14"))
-        summary["atr"] = None if pd.isna(last.get("atr14")) else float(last.get("atr14"))
-    except Exception:
-        pass
-
-    return {"symbol": sym, "series": series, "latest": latest, "summary": summary}
-
-
-def _compute_smart_money(symbol: str, period: str = "1y", interval: str = "1d") -> dict:
-    """Rudimentary "smart money" signals based on volume spikes, OBV slope and institutional holding hints.
-
-    Returns counts of big-buy / big-sell events and an overall bias.
-    """
-    sym = (symbol or "").strip().upper()
-    if not sym:
-        raise HTTPException(status_code=400, detail="Invalid symbol")
-    hist = fetch_price_history_yfinance(sym, period=period, interval=interval)
-    if not hist:
-        return {"symbol": sym, "big_buy_30": 0, "big_sell_30": 0, "net_big": 0, "obv_slope": None, "institutional_holding": None}
-
-    df = pd.DataFrame(hist)
-    df.sort_values("at", inplace=True)
-    df = df.reset_index(drop=True)
-    for c in ["open", "high", "low", "close", "volume"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-
-    # Moving average of volume to detect spikes
-    df["vol_ma20"] = df["volume"].rolling(20, min_periods=1).mean()
-    df["big_vol"] = df["volume"] > (df["vol_ma20"] * 2.0)
-    df["big_buy"] = df["big_vol"] & (df["close"] > df["close"].shift(1))
-    df["big_sell"] = df["big_vol"] & (df["close"] < df["close"].shift(1))
-
-    last_30 = df.tail(30)
-    big_buy_30 = int(last_30["big_buy"].sum())
-    big_sell_30 = int(last_30["big_sell"].sum())
-    net_big = big_buy_30 - big_sell_30
-
-    # OBV slope over last 30 days
-    df["obv"] = (np.sign(df["close"].diff()) * df["volume"]).fillna(0).cumsum()
-    obv_vals = df["obv"].dropna()
-    obv_slope = None
-    try:
-        y = obv_vals.tail(30).values
-        if len(y) >= 2:
-            x = np.arange(len(y))
-            obv_slope = float(np.polyfit(x, y, 1)[0])
-    except Exception:
-        obv_slope = None
-
-    # try to fetch institutional holding hint from fundamentals
-    inst_holding = None
-    try:
-        info_payload = fetch_price_and_fundamentals_yfinance(sym)
-        inst_holding = (info_payload.get("raw") or {}).get("info", {}).get("heldPercentInstitutions")
-    except Exception:
-        inst_holding = None
-
-    bias = "neutral"
-    if net_big > 2 or (obv_slope is not None and obv_slope > 0):
-        bias = "accumulation"
-    elif net_big < -2 or (obv_slope is not None and obv_slope < 0):
-        bias = "distribution"
-
-    return {
-        "symbol": sym,
-        "big_buy_30": big_buy_30,
-        "big_sell_30": big_sell_30,
-        "net_big": net_big,
-        "obv_slope": obv_slope,
-        "institutional_holding": inst_holding,
-        "bias": bias,
-    }
-
-
-    return _refresh_fundamentals(s, sym)
-
-
-@app.get("/technical/{symbol}")
-def get_technical(symbol: str, period: str = "1y", interval: str = "1d") -> dict:
-    """Compute and return technical indicators for a symbol."""
-    try:
-        data = _compute_technical_indicators(symbol, period=period, interval=interval)
-        return jsonable_encoder(data)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Technical indicators failed: {e}") from e
-
-
-@app.get("/smart-money/{symbol}")
-def get_smart_money(symbol: str, period: str = "1y", interval: str = "1d", persist: bool = True) -> dict:
-    """Compute rudimentary smart-money signals for a symbol."""
-    try:
-        data = _compute_smart_money(symbol, period=period, interval=interval)
-        if persist:
-            try:
-                with session_scope() as s:
-                    sym = (symbol or "").strip().upper()
-                    row = SmartMoneySignal(symbol=sym, provider="computed", computed_at=datetime.utcnow(), payload=json.dumps(data))
-                    s.add(row)
-                    s.flush()
-            except Exception:
-                pass
-        return jsonable_encoder(data)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Smart money computation failed: {e}") from e
 
 
 @app.post("/trades/import/csv")
@@ -1884,11 +1618,6 @@ def clear_dataset(account_id: int = 1) -> dict:
         # Cascade should handle trade_strategy_table if trades are deleted, but let's be safe
         s.execute(trade_strategy_table.delete().where(trade_strategy_table.c.trade_id.in_(select(Trade.id).where(Trade.account_id == account_id))))
         return {"status": "cleared"}
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
 
 @app.post("/settings/restore")
 async def restore_dataset(file: UploadFile, account_id: int = 1):
@@ -2160,6 +1889,29 @@ def startup_event():
     from .db import engine as _engine
     Base.metadata.create_all(bind=_engine)
 
+    # Drop obsolete analysis tables left over from pre-journaling-only builds.
+    # These are safe to drop — we no longer read or write to them.
+    obsolete_tables = [
+        "stock_raw_data",
+        "stock_metrics",
+        "smart_money_signals",
+        "technical_metrics",
+        "quantitative_metrics",
+        "stock_scores",
+        "symbol_mappings",
+    ]
+    try:
+        from sqlalchemy import inspect, text
+        insp = inspect(_engine)
+        existing = set(insp.get_table_names())
+        with _engine.begin() as conn:
+            for tbl in obsolete_tables:
+                if tbl in existing:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+                    logger.info("Dropped obsolete table: %s", tbl)
+    except Exception as e:
+        logger.debug("Table cleanup skipped: %s", e)
+
 
 @app.get("/insights")
 def insights(account_id: int = 1) -> dict:
@@ -2393,101 +2145,6 @@ def delete_lesson(lesson_id: int) -> dict:
         return {"deleted": True}
 
 
-def _read_ohlcv_csv(upload: UploadFile) -> pd.DataFrame:
-    if not (upload.filename or "").lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Please upload a .csv file")
-    raw = upload.file.read()
-    try:
-        text = raw.decode("utf-8-sig")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to decode CSV: {e}") from e
-    df = pd.read_csv(io.StringIO(text))
-    cols = {c.lower().strip(): c for c in df.columns}
-    required = ["date", "open", "high", "low", "close", "volume"]
-    missing = [c for c in required if c not in cols]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"Missing columns: {', '.join(missing)}")
-    df = df[[cols["date"], cols["open"], cols["high"], cols["low"], cols["close"], cols["volume"]]].copy()
-    df.columns = ["date", "open", "high", "low", "close", "volume"]
-    df["date"] = pd.to_datetime(df["date"], utc=True, errors="coerce")
-    for c in ["open", "high", "low", "close", "volume"]:
-        df[c] = pd.to_numeric(df[c], errors="coerce")
-    df = df.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
-    return df
-
-
-def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    delta = close.diff()
-    gain = delta.clip(lower=0.0)
-    loss = -delta.clip(upper=0.0)
-    avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-
-def _ema(s: pd.Series, span: int) -> pd.Series:
-    return s.ewm(span=span, adjust=False).mean()
-
-
-@app.post("/quant/indicators")
-async def quant_indicators(
-    file: UploadFile = File(...),
-    rsi_period: int = 14,
-    macd_fast: int = 12,
-    macd_slow: int = 26,
-    macd_signal: int = 9,
-    sma_1: int = 20,
-    sma_2: int = 50,
-    bb_period: int = 20,
-    bb_std: float = 2.0,
-) -> dict:
-    """
-    Upload OHLCV CSV and compute indicators (pandas/numpy).
-    Required columns: date, open, high, low, close, volume
-    """
-    df = _read_ohlcv_csv(file)
-    if len(df) < 5:
-        raise HTTPException(status_code=400, detail="Not enough rows to compute indicators")
-
-    close = df["close"]
-    vol = df["volume"].fillna(0.0)
-
-    df["rsi"] = _rsi(close, rsi_period)
-
-    ema_fast = _ema(close, macd_fast)
-    ema_slow = _ema(close, macd_slow)
-    df["macd"] = ema_fast - ema_slow
-    df["macd_signal"] = _ema(df["macd"], macd_signal)
-    df["macd_hist"] = df["macd"] - df["macd_signal"]
-
-    df[f"sma_{sma_1}"] = close.rolling(sma_1).mean()
-    df[f"sma_{sma_2}"] = close.rolling(sma_2).mean()
-
-    ma = close.rolling(bb_period).mean()
-    sd = close.rolling(bb_period).std(ddof=0)
-    df["bb_mid"] = ma
-    df["bb_upper"] = ma + bb_std * sd
-    df["bb_lower"] = ma - bb_std * sd
-
-    tp = (df["high"] + df["low"] + df["close"]) / 3.0
-    cum_pv = (tp * vol).cumsum()
-    cum_v = vol.cumsum().replace(0, np.nan)
-    df["vwap"] = cum_pv / cum_v
-
-    out = df.tail(500).copy()
-    out["date"] = out["date"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return {
-        "rows": out.to_dict(orient="records"),
-        "meta": {
-            "count": int(len(df)),
-            "tail": int(len(out)),
-            "columns": list(out.columns),
-        },
-    }
-
-
 def _to_asset_read(a: Asset) -> AssetRead:
     mv = float((a.quantity or 0.0) * (a.current_price or 0.0))
     cb = float((a.quantity or 0.0) * (a.avg_cost or 0.0))
@@ -2582,172 +2239,15 @@ def portfolio_holdings() -> list[HoldingRow]:
 
 # --- New Analysis Endpoints ---
 
+@app.get('/symbols/lookup/{symbol}')
+def symbol_lookup(symbol: str) -> dict:
+    """Lightweight symbol lookup used by the Add Trade form.
 
-from .fundamentals import refresh_fundamentals
-from .engine_technicals import refresh_technicals
-from .engine_quant import refresh_quant
-from .models import TechnicalMetrics, QuantitativeMetrics
-
-
-@app.get('/analysis/fundamentals/{symbol}')
-def get_fundamentals(symbol: str, refresh: bool = False):
-    """Get fundamental analysis for a symbol. Cache-first; refresh on demand."""
-    sym = symbol.strip().upper()
-    with session_scope() as s:
-        if not refresh:
-            m = s.execute(
-                select(StockMetrics).where(StockMetrics.symbol == sym)
-                .order_by(StockMetrics.fetched_at.desc())
-            ).scalars().first()
-            if m:
-                return {
-                    'symbol': m.symbol,
-                    'current_price': m.current_price,
-                    'market_cap': m.market_cap,
-                    'eps': m.eps,
-                    'pe_ratio': m.pe_ratio,
-                    'peg_ratio': m.peg_ratio,
-                    'ev_ebitda': m.ev_ebitda,
-                    'fair_value_pe': m.fair_value_pe,
-                    'fair_value_peg': m.fair_value_peg,
-                    'revenue_growth': m.revenue_growth,
-                    'eps_growth': m.eps_growth,
-                    'roe': m.roe,
-                    'net_profit_margin': m.net_profit_margin,
-                    'debt_to_equity': m.debt_to_equity,
-                    'current_ratio': m.current_ratio,
-                    'free_cash_flow': m.free_cash_flow,
-                    'fcf_yield': m.fcf_yield,
-                    'fundamental_score': m.fundamental_score,
-                    'fetched_at': m.fetched_at,
-                    'provider': m.provider,
-                    'company_name': m.company_name,
-                    'quote_type': m.quote_type,
-                }
-
-        # Fetch / Refresh from provider
-        try:
-            refresh_fundamentals(s, sym)
-            m = s.execute(
-                select(StockMetrics).where(StockMetrics.symbol == sym)
-                .order_by(StockMetrics.fetched_at.desc())
-            ).scalars().first()
-            if m:
-                return {
-                    'symbol': m.symbol,
-                    'current_price': m.current_price,
-                    'market_cap': m.market_cap,
-                    'eps': m.eps,
-                    'pe_ratio': m.pe_ratio,
-                    'peg_ratio': m.peg_ratio,
-                    'ev_ebitda': m.ev_ebitda,
-                    'fair_value_pe': m.fair_value_pe,
-                    'fair_value_peg': m.fair_value_peg,
-                    'revenue_growth': m.revenue_growth,
-                    'eps_growth': m.eps_growth,
-                    'roe': m.roe,
-                    'net_profit_margin': m.net_profit_margin,
-                    'debt_to_equity': m.debt_to_equity,
-                    'current_ratio': m.current_ratio,
-                    'free_cash_flow': m.free_cash_flow,
-                    'fcf_yield': m.fcf_yield,
-                    'fundamental_score': m.fundamental_score,
-                    'fetched_at': m.fetched_at,
-                    'provider': m.provider,
-                    'company_name': m.company_name,
-                    'quote_type': m.quote_type,
-                }
-            raise HTTPException(status_code=404, detail='No fundamentals data available')
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Failed to fetch fundamentals: {e}')
-
-
-@app.get('/analysis/technical/{symbol}')
-def get_technical(symbol: str, period: str = '1y', interval: str = '1d', refresh: bool = False):
-    """Get technical indicators for a symbol. Cache-first; refresh on demand."""
-    sym = symbol.strip().upper()
-    with session_scope() as s:
-        if not refresh:
-            m = s.execute(
-                select(TechnicalMetrics).where(TechnicalMetrics.symbol == sym)
-                .order_by(TechnicalMetrics.fetched_at.desc())
-            ).scalars().first()
-            if m:
-                payload = json.loads(m.payload) if isinstance(m.payload, str) else (m.payload or {})
-                return {
-                    'symbol': m.symbol,
-                    'score': m.score,
-                    'signal': m.signal,
-                    'payload': payload,
-                    'fetched_at': m.fetched_at,
-                }
-
-        try:
-            result = refresh_technicals(s, sym)
-            return result
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Failed to fetch technical data: {e}')
-
-
-@app.get('/analysis/smart-money/{symbol}')
-def get_smart_money(symbol: str, period: str = '6m', interval: str = '1d', refresh: bool = False):
-    """Get smart-money / quantitative flow indicators for a symbol."""
-    sym = symbol.strip().upper()
-    with session_scope() as s:
-        if not refresh:
-            m = s.execute(
-                select(QuantitativeMetrics).where(QuantitativeMetrics.symbol == sym)
-                .order_by(QuantitativeMetrics.fetched_at.desc())
-            ).scalars().first()
-            if m:
-                payload = json.loads(m.payload) if isinstance(m.payload, str) else (m.payload or {})
-                return {
-                    'symbol': m.symbol,
-                    'score': m.score,
-                    'signal': m.signal,
-                    'payload': payload,
-                    'fetched_at': m.fetched_at,
-                }
-
-        try:
-            result = refresh_quant(s, sym)
-            return result
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Failed to fetch smart-money data: {e}')
-
-
-@app.get('/analysis/quant/{symbol}')
-def get_quant_live(symbol: str, period: str = '6m', interval: str = '1d', refresh: bool = False):
-    """Alias for smart-money — live quantitative analysis by ticker symbol."""
-    return get_smart_money(symbol=symbol, period=period, interval=interval, refresh=refresh)
-
-
-@app.get('/analysis/potential/{symbol}')
-def get_potential(symbol: str, duration: int = 365):
-    """Get potential ROI simulation for a symbol."""
-    from .simulator import calculate_potential
+    Returns ``company_name`` and ``quote_type`` so the UI can
+    auto-detect a name and pre-select the market category.
+    """
     try:
-        return calculate_potential(symbol, duration)
+        return lookup_symbol(symbol)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get('/analysis/stock-score/{symbol}')
-def get_stock_score(symbol: str):
-    """Get the calculated quality score for a stock."""
-    from .models import StockScore
-    sym = symbol.strip().upper()
-    with session_scope() as s:
-        m = s.get(StockScore, sym)
-        if m:
-            return {
-                'symbol': m.symbol,
-                'score': m.score,
-                'personal_win_rate': m.personal_win_rate,
-                'personal_total_pnl': m.personal_total_pnl,
-                'personal_trade_count': m.personal_trade_count,
-                'last_updated': m.last_updated
-            }
-        return {'symbol': sym, 'score': 0, 'message': 'No score data yet'}
+        logger.debug("Symbol lookup failed for %s: %s", symbol, e)
+        return {"symbol": symbol.strip().upper(), "company_name": None, "quote_type": None}

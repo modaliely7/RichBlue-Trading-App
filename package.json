@@ -8,6 +8,9 @@
     "packages/*"
   ],
   "main": "index.js",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
   "scripts": {
     "dev": "concurrently -n DESKTOP,API -c auto \"npm -w @ta/desktop run dev\" \"npm -w @ta/api run dev\"",
     "dev:desktop": "npm -w @ta/desktop run dev",
