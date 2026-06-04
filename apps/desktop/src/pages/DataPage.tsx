@@ -51,7 +51,7 @@ export function DataPage() {
       <div className="grid2" style={{ marginTop: 20 }}>
         <div className="card panel">
           <div className="panelTitle">Export Data</div>
-          <p className="muted" style={{ fontSize: 14, marginBottom: 16 }}>
+          <p className="muted">
             Download all your trades for this account in a standardized CSV format.
           </p>
           <button className="btn" onClick={exportCsv}>
@@ -61,7 +61,7 @@ export function DataPage() {
 
         <div className="card panel">
           <div className="panelTitle">Import Data</div>
-          <p className="muted" style={{ fontSize: 14, marginBottom: 16 }}>
+          <p className="muted">
             Upload a CSV file to import trades. Ensure the columns match the exported format.
           </p>
           <label className="fileBtn">
@@ -85,14 +85,13 @@ export function DataPage() {
         </div>
       </div>
 
-      <div className="card panel" style={{ marginTop: 24, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-        <div className="panelTitle" style={{ color: 'var(--bad)' }}>Danger Zone</div>
-        <p className="muted" style={{ fontSize: 14, marginBottom: 16 }}>
+      <div className="card panel" style={{ marginTop: 24 }}>
+        <div className="panelTitle">Danger Zone</div>
+        <p className="muted">
           These actions are permanent and cannot be undone.
         </p>
         <button 
           className="btn btnGhost" 
-          style={{ color: 'var(--bad)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
           onClick={() => {
             if (confirm('Are you sure you want to clear all trades for this account? This will also affect your performance metrics.')) {
               // Implementation for clearing trades would go here if backend supported it

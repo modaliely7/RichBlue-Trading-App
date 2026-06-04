@@ -43,17 +43,6 @@ export type PsychologySummaryRow = {
   win_rate: number | null
 }
 
-export type InsightCard = {
-  title: string
-  severity: 'good' | 'warning' | 'info'
-  detail: string
-}
-
-export type InsightsResponse = {
-  insights: InsightCard[]
-  closed_trades?: number
-}
-
 export type PerfRow = {
   key: string
   count: number
@@ -166,12 +155,10 @@ export type OverviewResponse = {
   chart: OverviewChartSeries
 }
 
-
-export type QuantRow = Record<string, string | number | null>
-
-export type QuantIndicatorsResponse = {
-  rows: QuantRow[]
-  meta: { count: number; tail: number; columns: string[] }
+export type SymbolLookupResponse = {
+  symbol: string
+  company_name: string | null
+  quote_type: string | null
 }
 
 export type LessonCategory = 'Mistake' | 'Lesson' | 'Psychological note' | 'Strategy insight'
@@ -311,19 +298,6 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
   return (await res.json()) as T
 }
 
-async function uploadFileWithQuery<T>(path: string, file: File, query: Record<string, string | number>): Promise<T> {
-  const params = new URLSearchParams()
-  for (const [k, v] of Object.entries(query)) params.set(k, String(v))
-  const form = new FormData()
-  form.append('file', file)
-  const res = await fetch(`${API_BASE}${path}?${params.toString()}`, { method: 'POST', body: form })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `Upload failed (${res.status})`)
-  }
-  return (await res.json()) as T
-}
-
 async function download(path: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}${path}`)
   if (!res.ok) {
@@ -360,7 +334,6 @@ export const api = {
   deletePsychology: (id: number) => apiFetch<{ deleted: true }>(`/psychology/${id}`, { method: 'DELETE' }),
   psychologySummary: (accountId: number = 1) => apiFetch<PsychologySummaryRow[]>(`/psychology/summary?account_id=${accountId}`),
 
-  insights: (accountId: number = 1) => apiFetch<InsightsResponse>(`/insights?account_id=${accountId}`),
   performanceAnalytics: (params: { start?: string; end?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
     if (params.start) q.set('start', params.start)
@@ -377,9 +350,6 @@ export const api = {
   deleteAsset: (id: number) => apiFetch<{ deleted: true }>(`/assets/${id}`, { method: 'DELETE' }),
   portfolioSummary: (accountId: number = 1) => apiFetch<PortfolioSummary>(`/portfolio/summary?account_id=${accountId}`),
   portfolioHoldings: (accountId: number = 1) => apiFetch<HoldingRow[]>(`/portfolio/holdings?account_id=${accountId}`),
-
-  quantIndicators: (file: File, query: Record<string, string | number> = {}) =>
-    uploadFileWithQuery<QuantIndicatorsResponse>('/quant/indicators', file, query),
 
   listLessons: (params: { q?: string; category?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
@@ -419,42 +389,8 @@ export const api = {
     if (method) q.set('method', method)
     return apiFetch<OverviewResponse>(`/overview?${q.toString()}`)
   },
-  fundamentals: (symbol: string, refresh: boolean = false) => {
-    const q = new URLSearchParams()
-    if (refresh) q.set('refresh', '1')
-    const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/analysis/fundamentals/${encodeURIComponent(symbol)}${suffix}`)
-  },
-
-  technicalIndicators: (symbol: string, period: string = '1y', interval: string = '1d') => {
-    const q = new URLSearchParams()
-    if (period) q.set('period', period)
-    if (interval) q.set('interval', interval)
-    const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/analysis/technical/${encodeURIComponent(symbol)}${suffix}`)
-  },
-  potential: (symbol: string, duration: number = 365) => {
-    return apiFetch<any>(`/analysis/potential/${encodeURIComponent(symbol)}?duration=${duration}`)
-  },
-  stockScore: (symbol: string) => {
-    return apiFetch<any>(`/analysis/stock-score/${encodeURIComponent(symbol)}`)
-  },
-
-  quantLive: (symbol: string, period: string = '6m', interval: string = '1d') => {
-    const q = new URLSearchParams()
-    if (period) q.set('period', period)
-    if (interval) q.set('interval', interval)
-    const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/analysis/quant/${encodeURIComponent(symbol)}${suffix}`)
-  },
-
-  smartMoney: (symbol: string, period: string = '6m', interval: string = '1d') => {
-    const q = new URLSearchParams()
-    if (period) q.set('period', period)
-    if (interval) q.set('interval', interval)
-    const suffix = q.toString() ? `?${q.toString()}` : ''
-    return apiFetch<any>(`/analysis/smart-money/${encodeURIComponent(symbol)}${suffix}`)
-  },
+  lookupSymbol: (symbol: string) =>
+    apiFetch<SymbolLookupResponse>(`/symbols/lookup/${encodeURIComponent(symbol)}`),
 
   cashBalance: (accountId: number = 1) => apiFetch<CashBalanceResponse>(`/cash/balance?account_id=${accountId}`),
   cashTransactions: (accountId: number = 1) => apiFetch<CashTx[]>(`/cash/transactions?account_id=${accountId}`),
@@ -465,7 +401,7 @@ export const api = {
   cashAdjust: (payload: { amount: number; at?: string; note?: string }, accountId: number = 1) =>
     apiFetch<CashBalanceResponse>(`/cash/adjust?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
   deleteCashTransaction: (id: number) => apiFetch<{ deleted: true }>(`/cash/transactions/${id}`, { method: 'DELETE' }),
-  updateCashTransaction: (id: number, payload: { amount: number; at?: string; note?: string }) => 
+  updateCashTransaction: (id: number, payload: { amount: number; at?: string; note?: string }) =>
     apiFetch<CashTx>(`/cash/transactions/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
 
   backupDataset: (accountId: number = 1) => download(`/settings/backup.json?account_id=${accountId}`),
@@ -487,4 +423,3 @@ export const api = {
     apiFetch<Strategy>(`/strategies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteStrategy: (id: number) => apiFetch<{ deleted: true }>(`/strategies/${id}`, { method: 'DELETE' }),
 }
-

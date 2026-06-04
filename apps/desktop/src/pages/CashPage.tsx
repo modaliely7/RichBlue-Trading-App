@@ -124,7 +124,7 @@ export function CashPage() {
 
         <div className="card panel">
           <div className="panelTitle">Cash Actions</div>
-          <div className="formGrid" style={{ marginTop: 12 }}>
+          <div className="formGrid">
             <label>
               <div className="label">Amount</div>
               <input
@@ -153,7 +153,7 @@ export function CashPage() {
                 onChange={e => setEditNote(e.target.value)}
               />
             </label>
-            <div className="detailsActions span2" style={{ marginTop: 8 }}>
+            <div className="detailsActions span2">
               <button
                 className="btn"
                 disabled={!depositAmount || depositMutation.isPending}
@@ -190,7 +190,7 @@ export function CashPage() {
         </div>
       </div>
 
-      <div className="card panel" style={{ marginTop: 20 }}>
+      <div className="card panel">
         <div className="panelTitle">Transaction History</div>
         {isLoading ? (
           <div className="muted">Loading...</div>
@@ -219,7 +219,6 @@ export function CashPage() {
                             type="datetime-local"
                             value={editDate}
                             onChange={e => setEditDate(e.target.value)}
-                            style={{ padding: 4, width: '100%' }}
                           />
                         ) : (
                           new Date(tx.at).toLocaleString()
@@ -230,13 +229,12 @@ export function CashPage() {
                           {tx.tx_type}
                         </span>
                       </td>
-                      <td className={tx.amount > 0 ? 'good' : tx.amount < 0 ? 'bad' : ''} style={{ fontWeight: 'bold' }}>
+                      <td className={tx.amount > 0 ? 'good' : tx.amount < 0 ? 'bad' : ''}>
                         {isEditing ? (
                           <input
                             type="number"
                             value={editAmount}
                             onChange={e => setEditAmount(e.target.value)}
-                            style={{ padding: 4, width: '100px' }}
                           />
                         ) : (
                           (tx.amount > 0 ? '+' : '') + formatCurrency(tx.amount)
@@ -250,7 +248,6 @@ export function CashPage() {
                             type="text"
                             value={editNote}
                             onChange={e => setEditNote(e.target.value)}
-                            style={{ padding: 4, width: '100%' }}
                           />
                         ) : (
                           tx.note || '—'
@@ -262,7 +259,6 @@ export function CashPage() {
                             <>
                               <button
                                 className="btn btnGhost"
-                                style={{ padding: '4px 8px', fontSize: 12, marginRight: 4 }}
                                 disabled={updateMutation.isPending}
                                 onClick={() => {
                                   const parsedDate = editDate ? new Date(editDate).toISOString() : undefined
@@ -278,7 +274,6 @@ export function CashPage() {
                               </button>
                               <button
                                 className="btn btnGhost"
-                                style={{ padding: '4px 8px', fontSize: 12 }}
                                 onClick={() => setEditingTxId(null)}
                               >
                                 Cancel
@@ -288,7 +283,6 @@ export function CashPage() {
                             <>
                               <button
                                 className="btn btnGhost"
-                                style={{ padding: '4px 8px', fontSize: 12, marginRight: 4 }}
                                 onClick={() => {
                                   setEditingTxId(tx.id)
                                   setEditAmount(String(tx.amount))
@@ -302,7 +296,6 @@ export function CashPage() {
                               </button>
                               <button
                                 className="btn btnGhost"
-                                style={{ padding: '4px 8px', fontSize: 12 }}
                                 disabled={deleteMutation.isPending}
                                 onClick={() => {
                                   if (window.confirm('Delete this cash transaction? This will impact your balance and historical portfolio values.')) {
@@ -315,14 +308,14 @@ export function CashPage() {
                             </>
                           )
                         ) : (
-                          <span className="muted" style={{ fontSize: 12 }}>Auto (Linked)</span>
+                          <span className="muted">Auto (Linked)</span>
                         )}
                       </td>
                     </tr>
                   )
                 }) : (
                   <tr>
-                    <td colSpan={7} className="muted text-center">No cash transactions found.</td>
+                    <td colSpan={7} className="muted textCenter">No cash transactions found.</td>
                   </tr>
                 )}
               </tbody>

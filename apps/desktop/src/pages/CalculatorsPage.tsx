@@ -86,7 +86,7 @@ export function CalculatorsPage() {
               <div style={{ marginTop: 24, padding: 20, background: 'var(--panel2)', borderRadius: 12, border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                   <span className="muted">Position Size:</span>
-                  <span className="good strong mono" style={{ fontSize: 20 }}>
+                  <span className="good strong mono">
                     {Number.isFinite(calc.positionSize) ? calc.positionSize.toFixed(2) : '—'} units
                   </span>
                 </div>
@@ -119,7 +119,7 @@ export function CalculatorsPage() {
             <div className="card panel">
               <div className="panelTitle">Portfolio Allocation</div>
               <div style={{ textAlign: 'center', padding: '10px 0 20px' }}>
-                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent)' }}>{allocationPct.toFixed(1)}%</div>
+                <div className="accent" style={{ fontSize: 32, fontWeight: 800 }}>{allocationPct.toFixed(1)}%</div>
                 <div className="muted">of portfolio currently allocated</div>
               </div>
               
@@ -141,7 +141,7 @@ export function CalculatorsPage() {
                         <tr key={h.symbol} onClick={() => {
                           setEntry(h.avg_open_cost || 0)
                           setAccount(pv)
-                        }} style={{ cursor: 'pointer' }}>
+                        }}>
                           <td className="mono">{h.symbol}</td>
                           <td className="mono">{h.open_quantity}</td>
                           <td className="mono">{formatCurrency(val)}</td>
@@ -163,7 +163,7 @@ export function CalculatorsPage() {
                 <div>
                   <div className="label" style={{ marginBottom: 12 }}>Kelly Criterion</div>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Suggests optimal risk % based on win rate and RR.</div>
-                  <div style={{ padding: 16, background: 'var(--bg)', borderRadius: 8 }}>
+                  <div className="card panel">
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span className="muted">Optimal Risk:</span>
                       <span className="good strong mono">2.45%</span>
@@ -174,7 +174,7 @@ export function CalculatorsPage() {
                 <div>
                   <div className="label" style={{ marginBottom: 12 }}>Risk of Ruin</div>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Probability of losing entire capital.</div>
-                  <div style={{ padding: 16, background: 'var(--bg)', borderRadius: 8 }}>
+                  <div className="card panel">
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span className="muted">Probability:</span>
                       <span className="bad strong mono">0.02%</span>
@@ -190,11 +190,11 @@ export function CalculatorsPage() {
         <div className="sideCol">
           <div className="sectionTitle">Recent Calculations</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div className="card panel" style={{ padding: 12 }}>
+            <div className="card panel">
               <div style={{ fontSize: 12, fontWeight: 600 }}>AAPL Breakout Plan</div>
               <div className="muted" style={{ fontSize: 11 }}>Risk: $100 | Size: 12 shares</div>
             </div>
-            <div className="card panel" style={{ padding: 12 }}>
+            <div className="card panel">
               <div style={{ fontSize: 12, fontWeight: 600 }}>TSLA Mean Reversion</div>
               <div className="muted" style={{ fontSize: 11 }}>Risk: $200 | Size: 4 shares</div>
             </div>

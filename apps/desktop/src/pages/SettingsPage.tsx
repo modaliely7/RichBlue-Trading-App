@@ -43,16 +43,16 @@ export function SettingsPage() {
   const mainAccountId = accounts.length > 0 ? Math.min(...accounts.map(a => a.id)) : -1
 
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('theme') || 'default'
+    return localStorage.getItem('theme') || 'light'
   })
 
   const applyTheme = (t: string) => {
     setTheme(t)
     localStorage.setItem('theme', t)
-    if (t === 'default') {
-      document.documentElement.removeAttribute('data-theme')
+    if (t === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark')
     } else {
-      document.documentElement.setAttribute('data-theme', t)
+      document.documentElement.removeAttribute('data-theme')
     }
   }
 
@@ -416,19 +416,14 @@ export function SettingsPage() {
                 <p className="muted" style={{ marginTop: 8 }}>Choose the visual style that best fits your workflow.</p>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
                 {[
-                  { id: 'default', label: 'Default Dark', bg: '#060b17', accent: '#3b82f6' },
-                  { id: 'midnight', label: 'Midnight Blue', bg: '#030712', accent: '#818cf8' },
-                  { id: 'ocean', label: 'Deep Ocean', bg: '#0c4a6e', accent: '#38bdf8' },
-                  { id: 'emerald', label: 'Emerald City', bg: '#022c22', accent: '#34d399' },
-                  { id: 'light', label: 'Clean Light', bg: '#f8fafc', accent: '#2563eb' },
-                  { id: 'medred', label: 'Retrowave', bg: '#2b1a3d', accent: '#f43f5e' }
+                  { id: 'light', label: 'Light', bg: '#f8fafc', accent: '#8719e0' },
+                  { id: 'dark', label: 'Dark', bg: '#141520', accent: '#a368fc' }
                 ].map(t => (
                   <div
                     key={t.id}
                     onClick={() => applyTheme(t.id)}
-                    className="themeCard"
                     style={{
                       background: 'var(--bg)',
                       padding: 16,

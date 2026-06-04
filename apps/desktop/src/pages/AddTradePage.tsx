@@ -83,7 +83,7 @@ export function AddTradePage() {
     const timer = setTimeout(async () => {
       setIsDetecting(true)
       try {
-        const data = await api.fundamentals(sym)
+        const data = await api.lookupSymbol(sym)
         if (data && data.company_name) {
           setDetectedName(data.company_name)
           const qt = data.quote_type
@@ -199,12 +199,12 @@ export function AddTradePage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, marginTop: 24 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="tradeSplit mt24">
+        <div className="flexCol" style={{ gap: 24 }}>
           {/* Main Details */}
           <div className="card panel">
             <div className="panelTitle">Trade Configuration</div>
-            <div className="formGrid detailsForm" style={{ marginTop: 16 }}>
+            <div className="formGrid detailsForm">
               <label>
                 <div className="label">Symbol</div>
                 <input
@@ -215,11 +215,11 @@ export function AddTradePage() {
                   placeholder="e.g., TSLA, AAPL"
                 />
                 {detectedName && (
-                  <div style={{ marginTop: 6, fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+                  <div className="mt4" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
                     ✓ {detectedName} <span style={{ opacity: 0.6, fontWeight: 400 }}>({market})</span>
                   </div>
                 )}
-                {isDetecting && <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>Validating symbol...</div>}
+                {isDetecting && <div className="muted mt4" style={{ fontSize: 11 }}>Validating symbol...</div>}
               </label>
 
               <label>
@@ -266,7 +266,7 @@ export function AddTradePage() {
               </label>
 
               <label>
-                <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div className="label">
                   <span>Entry Fees</span>
                   <span 
                     style={{ fontSize: 10, cursor: 'pointer', color: isAutoFees ? 'var(--accent)' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}
@@ -338,11 +338,11 @@ export function AddTradePage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="sideColCards" style={{ gap: 20 }}>
           {/* Risk Management Side Panel */}
           <div className="card panel" style={{ borderLeft: '4px solid var(--accent)' }}>
             <div className="panelTitle">🛡️ Risk Management</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
+            <div className="flexCol" style={{ gap: 16, marginTop: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 10 }}>
                 <label>
                   <div className="label">Stop Loss (Price)</div>
@@ -389,37 +389,36 @@ export function AddTradePage() {
                 </label>
               </div>
 
-              <div className="metricGrid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 10 }}>
-                <div className="metricCard" style={{ background: 'var(--panel2)', padding: 12, borderRadius: 8 }}>
-                  <div className="muted" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Risk Amount</div>
-                  <div style={{ color: 'var(--danger)', fontWeight: 800, fontSize: 16 }}>{formatCurrency(totalRisk)}</div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>{slPctStr}% move</div>
+              <div className="metricGrid mt8">
+                <div className="metricCard">
+                  <div className="muted">Risk Amount</div>
+                  <div className="metricCardValue bad">{formatCurrency(totalRisk)}</div>
+                  <div className="muted" style={{ fontSize: 11, opacity: 0.7 }}>{slPctStr}% move</div>
                 </div>
-                <div className="metricCard" style={{ background: 'var(--panel2)', padding: 12, borderRadius: 8 }}>
-                  <div className="muted" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Target Profit</div>
-                  <div style={{ color: 'var(--accent2)', fontWeight: 800, fontSize: 16 }}>{formatCurrency(totalReward)}</div>
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>{tpPctStr}% move</div>
+                <div className="metricCard">
+                  <div className="muted">Target Profit</div>
+                  <div className="metricCardValue good">{formatCurrency(totalReward)}</div>
+                  <div className="muted" style={{ fontSize: 11, opacity: 0.7 }}>{tpPctStr}% move</div>
                 </div>
               </div>
 
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                <div className="panelTitle" style={{ fontSize: 12, marginBottom: 12 }}>📏 Position Sizing Helper</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <label style={{ flex: 1 }}>
+                <div className="panelTitle">📏 Position Sizing Helper</div>
+                <div className="flexRow" style={{ gap: 12 }}>
+                  <label className="flex1">
                     <div className="label">Risk % of Account</div>
-                    <input 
-                      type="text" 
-                      value={riskPctOfAccount} 
+                    <input
+                      type="text"
+                      value={riskPctOfAccount}
                       onChange={e => setRiskPctOfAccount(normalizeDecimalTyping(riskPctOfAccount, e.target.value))}
                       style={{ height: 36 }}
                     />
                   </label>
                   <div style={{ flex: 1.5, textAlign: 'right' }}>
-                    <div className="muted" style={{ fontSize: 10, fontWeight: 700 }}>RECOMMENDED SIZE</div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>{recommendedSize} <span style={{ fontSize: 12, fontWeight: 500 }}>shares</span></div>
-                    <button 
-                      className="btnGhost" 
-                      style={{ fontSize: 10, padding: '2px 8px', height: 'auto', marginTop: 4 }}
+                    <div className="muted">RECOMMENDED SIZE</div>
+                    <div className="accent" style={{ fontSize: 18, fontWeight: 900 }}>{recommendedSize} <span style={{ fontSize: 12, fontWeight: 500 }}>shares</span></div>
+                    <button
+                      className="btn-ghost mt4"
                       onClick={() => setSizeStr(String(recommendedSize))}
                       disabled={recommendedSize <= 0}
                     >
@@ -427,23 +426,15 @@ export function AddTradePage() {
                     </button>
                   </div>
                 </div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+                <div className="muted mt8">
                   Based on current cash: <strong>{formatCurrency(cashAvailable)}</strong>
                 </div>
               </div>
 
-              <div style={{ 
-                background: rrRatio >= 2 ? 'var(--accent2-dim)' : 'var(--panel2)', 
-                padding: '12px 16px', 
-                borderRadius: 10, 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                border: rrRatio >= 2 ? '1px solid var(--accent2)' : '1px solid var(--border)'
-              }}>
+              <div className={`riskBanner ${rrRatio >= 2 ? 'status-ok' : ''}`} style={{ marginTop: 4 }}>
                 <div>
-                  <div className="muted" style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>R/R Ratio</div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: rrRatio >= 2 ? 'var(--accent2)' : 'var(--text-strong)' }}>
+                  <div className="muted">R/R Ratio</div>
+                  <div className={rrRatio >= 2 ? 'good' : 'strong'} style={{ fontSize: 20, fontWeight: 900 }}>
                     {rrRatio.toFixed(2)}
                   </div>
                 </div>
@@ -455,6 +446,7 @@ export function AddTradePage() {
           <div className="card panel">
             <div className="panelTitle">Summary</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                 <span className="muted">Total Value</span>
                 <span className="mono">{(entryPx * sizeNum).toLocaleString()}</span>
@@ -478,7 +470,7 @@ export function AddTradePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
               <button 
                 className="btn" 
-                style={{ width: '100%', height: 44, fontSize: 15 }}
+                style={{ width: '100%' }}
                 disabled={!canCreate || (!cashOk && !hasExitOnCreate) || createMutation.isPending}
                 onClick={() => {
                   createMutation.mutate({

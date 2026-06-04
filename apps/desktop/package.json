@@ -19,7 +19,14 @@
     "productName": "RichBlue",
     "copyright": "Copyright © 2025 RichBlue",
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "public/icon.ico"
     },
     "nsis": {
@@ -44,7 +51,9 @@
       {
         "from": "../../apps/api/dist/api",
         "to": "api",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "directories": {
@@ -52,10 +61,13 @@
       "buildResources": "public"
     },
     "asar": true,
-    "asarUnpack": ["**/api/**"]
+    "asarUnpack": [
+      "**/api/**"
+    ]
   },
   "dependencies": {
     "@tanstack/react-query": "^5.85.0",
+    "lucide-react": "^0.460.0",
     "react": "^19.2.4",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.2.4",

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pie, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api } from '../lib/api'
@@ -21,14 +21,15 @@ function pieSliceColors(n: number): { bg: string[]; border: string[] } {
 
 export function PortfolioPage() {
   const { currentAccount } = useAccount()
+  const qc = useQueryClient()
   const [method, setMethod] = useState<string>('realized')
   const [pnlPeriod, setPnlPeriod] = useState<string>('ALL')
   const [customStart, setCustomStart] = useState<string>('')
   const [customEnd, setCustomEnd] = useState<string>('')
-  
-  const { data: ov, isLoading, error } = useQuery({ 
-    queryKey: ['overview', currentAccount?.id, method], 
-    queryFn: () => api.overview(currentAccount?.id ?? 1, method) 
+
+  const { data: ov, isLoading, error } = useQuery({
+    queryKey: ['overview', currentAccount?.id, method],
+    queryFn: () => api.overview(currentAccount?.id ?? 1, method)
   })
 
   const [dividendSymbol, setDividendSymbol] = useState<string | null>(null)
@@ -49,8 +50,9 @@ export function PortfolioPage() {
       })
       setDividendSymbol(null)
       setDividendAmount('')
-      // Refresh data
-      window.location.reload() 
+      // Invalidate affected queries instead of full page reload
+      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['cash'] })
     } catch (e) {
       alert('Failed to record dividend')
     } finally {
@@ -163,9 +165,9 @@ export function PortfolioPage() {
           <div className="pageTitle">Portfolio</div>
           <div className="pageSubtitle">Cash plus the cost of what you own (from trades and fund positions)</div>
         </div>
-        <div className="detailsActions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="detailsActions">
           <OverviewSyncBar />
-            <select value={method} onChange={(e) => setMethod(e.target.value)} style={{ marginLeft: 12 }}>
+            <select value={method} onChange={(e) => setMethod(e.target.value)}>
               <option value="realized">Realized view</option>
               <option value="liquidation">With unrealized (liquidation)</option>
             </select>
@@ -217,15 +219,15 @@ export function PortfolioPage() {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: 12, marginTop: 12 }}>
+      <div className="grid panels">
         {/* Portfolio Mix Pie */}
         <div className="card panel">
           <div className="panelTitle">Portfolio mix (pie)</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+          <div className="muted mt4" style={{ fontSize: 13 }}>
             Current allocation: cash + holdings at cost (or market value).
           </div>
           {portfolioPie.total <= 0 ? (
-            <div className="muted" style={{ marginTop: 16 }}>No cash or positions yet.</div>
+            <div className="muted mt16">No cash or positions yet.</div>
           ) : (
             <>
               <div className="chartWrapper" style={{ maxWidth: 380, margin: '16px auto 0', height: 280 }}>
@@ -243,7 +245,7 @@ export function PortfolioPage() {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                      legend: { position: 'right', labels: { color: 'rgba(148,163,184,0.95)', boxWidth: 12 } },
+                      legend: { position: 'right', labels: { boxWidth: 12 } },
                       tooltip: {
                         callbacks: {
                           label: (ctx) => {
@@ -257,7 +259,7 @@ export function PortfolioPage() {
                   }}
                 />
               </div>
-              <div className="muted" style={{ marginTop: 10, textAlign: 'center', fontSize: 13 }}>
+              <div className="muted mt12 textCenter" style={{ fontSize: 13 }}>
                 Pie total: <span className="mono">{formatCurrency(portfolioPie.total)}</span>
               </div>
             </>
@@ -290,7 +292,7 @@ export function PortfolioPage() {
                     maintainAspectRatio: false,
                     cutout: '60%',
                     plugins: {
-                      legend: { position: 'bottom', labels: { color: 'rgba(148,163,184,0.95)', font: { size: 12 }, padding: 16, usePointStyle: true } },
+                      legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 16, usePointStyle: true } },
                       tooltip: {
                         callbacks: {
                           label: (ctx) => {
@@ -311,7 +313,7 @@ export function PortfolioPage() {
                     <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: earningsPie.bg[i] }} />
-                        <span style={{ color: 'var(--text)' }}>{lbl}</span>
+                        <span>{lbl}</span>
                       </span>
                       <span className={`mono ${val >= 0 ? 'good' : 'bad'}`}>{val >= 0 ? '+' : ''}{formatCurrency(val)}</span>
                     </div>
@@ -371,8 +373,8 @@ export function PortfolioPage() {
                   scales: {
                     x: { display: false },
                     y: {
-                      grid: { color: 'rgba(255,255,255,0.05)' },
-                      ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } }
+                      grid: { color: '#d9e2ec' },
+                      ticks: { color: '#627d98', font: { size: 10 } }
                     }
                   },
                   plugins: {

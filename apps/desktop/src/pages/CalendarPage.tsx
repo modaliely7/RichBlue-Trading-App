@@ -81,7 +81,7 @@ export function CalendarPage() {
         </div>
         <div className="detailsActions">
           <label className="muted">
-            <span style={{ marginRight: 8 }}>Go to</span>
+            <span>Go to</span>
             <input
               type="date"
               value={jumpDate}
@@ -150,17 +150,17 @@ export function CalendarPage() {
             <>
               <div className="detailsLine">
                 <span className="muted">Selected Day</span>
-                <span className="mono" style={{ color: 'var(--text-strong)', fontWeight: 700 }}>{selectedDay}</span>
+                <span className="mono strong">{selectedDay}</span>
               </div>
               <div className="detailsLine">
                 <span className="muted">Daily PnL</span>
-                <span className={`mono ${selected && selected.pnl >= 0 ? 'good' : 'bad'}`} style={{ fontWeight: 800 }}>
+                <span className={`mono strong ${selected && selected.pnl >= 0 ? 'good' : 'bad'}`}>
                   {formatCurrency(selected?.pnl ?? 0)}
                 </span>
               </div>
               <div className="detailsLine">
                 <span className="muted">Total Trades</span>
-                <span className="mono" style={{ color: 'var(--accent)' }}>{selected?.trades.length ?? 0}</span>
+                <span className="mono accent">{selected?.trades.length ?? 0}</span>
               </div>
 
               {selected?.trades.length ? (
@@ -175,8 +175,8 @@ export function CalendarPage() {
                     <tbody>
                       {selected.trades.map((t) => (
                         <tr key={t.id}>
-                          <td className="mono" style={{ color: 'var(--accent)' }}>{t.symbol}</td>
-                          <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'} style={{ fontWeight: 700 }}>
+                          <td className="mono accent">{t.symbol}</td>
+                          <td className={`strong ${t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'}`}>
                             {t.pnl == null ? '—' : formatCurrency(t.pnl)}
                           </td>
                         </tr>

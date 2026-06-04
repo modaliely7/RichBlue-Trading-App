@@ -61,7 +61,7 @@ export function StrategiesPage() {
       <div className="card panel">
         <div className="panelTitleRow">
           <div className="panelTitle">Strategy Filter</div>
-          {selectedIds.length > 0 && <button className="btn btnGhost" style={{ fontSize: 11 }} onClick={() => setSelectedIds([])}>Clear all</button>}
+          {selectedIds.length > 0 && <button className="btn btnGhost" onClick={() => setSelectedIds([])}>Clear all</button>}
         </div>
         <div className="tagList" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
           {strategies.map(s => {
@@ -72,13 +72,6 @@ export function StrategiesPage() {
                 className={`statusPill clickableTag ${isActive ? 'active' : ''}`}
                 onClick={() => {
                   setSelectedIds(prev => isActive ? prev.filter(id => id !== s.id) : [...prev, s.id])
-                }}
-                style={{ 
-                  cursor: 'pointer', 
-                  background: isActive ? (s.color || 'var(--accent)') : 'var(--bg)',
-                  color: 'var(--text-strong)',
-                  border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
-                  opacity: selectedIds.length === 0 || isActive ? 1 : 0.6
                 }}
               >
                 {s.name}
@@ -92,11 +85,11 @@ export function StrategiesPage() {
       {selectedIds.length > 0 ? (
         <div className="card panel" style={{ marginTop: 12 }}>
           <div className="panelTitleRow">
-            <div className="panelTitle" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="panelTitle">
               History for {selectedIds.map(id => {
                 const s = strategies.find(st => st.id === id)
                 return s ? (
-                  <span key={s.id} className="statusPill" style={{ background: s.color || 'var(--accent-dim)', color: 'var(--text-strong)', border: 'none' }}>{s.name}</span>
+                  <span key={s.id} className="statusPill">{s.name}</span>
                 ) : null
               })}
             </div>

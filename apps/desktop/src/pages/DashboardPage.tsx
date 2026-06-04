@@ -177,7 +177,7 @@ export function DashboardPage() {
       {isLoading && <div className="muted" style={{ textAlign: 'center', padding: '40px 0' }}>
         <div className="spinner" style={{ margin: '0 auto 10px' }} /> Loading dashboard…
       </div>}
-      {error && <div className="riskBanner status-breached" style={{ marginBottom: 20 }}>
+      {error && <div className="riskBanner status-breached">
         <div className="riskBannerTitle">⚠ API Unavailable</div>
         <div className="muted">Start the API server at 127.0.0.1:8001 to load data.</div>
       </div>}
@@ -263,14 +263,14 @@ export function DashboardPage() {
         <div className="panelTitleRow">
           <div>
             <div className="panelTitle">Portfolio Value (Realized) vs Net Deposited</div>
-            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Realized growth: Net Deposited + Cumulative Realized P/L</div>
+            <div className="muted">Realized growth: Net Deposited + Cumulative Realized P/L</div>
           </div>
           <div className="detailsActions">
             {CHART_RANGES.map(b => (
               <button key={b.id} type="button" className={`rangeBtn ${chartRange === b.id ? 'active' : ''}`} onClick={() => setChartRange(b.id)}>{b.label}</button>
             ))}
             {chartRange === 'custom' && (
-              <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+              <div className="customDateRange">
                 <input type="date" className="miniInput" value={customStart} onChange={e => setCustomStart(e.target.value)} />
                 <input type="date" className="miniInput" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
               </div>
@@ -284,9 +284,9 @@ export function DashboardPage() {
               data={{
                 labels: chartFiltered.labels,
                 datasets: [
-                  { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
-                  { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(148,163,184,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
-                  { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
+                  { label: 'Portfolio (Realized)', data: chartFiltered.portfolio_value, borderColor: '#8719e0', backgroundColor: 'rgba(135,25,224,0.08)', fill: true, pointRadius: 0, tension: 0.3 },
+                  { label: 'Net Deposited', data: chartFiltered.net_deposited, borderColor: 'rgba(98,125,152,0.6)', borderDash: [6, 4], fill: false, pointRadius: 0, tension: 0.2 },
+                  { label: 'Realized P/L', data: chartFiltered.total_return_value, borderColor: '#147d64', backgroundColor: 'rgba(20,125,100,0.05)', fill: false, pointRadius: 0, tension: 0.25 },
                 ],
               }}
               options={{
@@ -294,11 +294,11 @@ export function DashboardPage() {
                 interaction: { intersect: false, mode: 'index' },
                 plugins: {
                   legend: { position: 'bottom', labels: { color: cssVar('--muted2', '#94a3b8'), usePointStyle: true, pointStyleWidth: 10, font: { size: 11 } } },
-                  tooltip: { intersect: false, mode: 'index', backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
+                  tooltip: { intersect: false, mode: 'index', backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: '#d9e2ec', borderWidth: 1 },
                 },
                 scales: {
-                  x: { ticks: { maxTicksLimit: 8, color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
-                  y: { beginAtZero: false, ticks: { color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                  x: { ticks: { maxTicksLimit: 8, color: '#627d98', font: { size: 11 } }, grid: { color: '#d9e2ec' } },
+                  y: { beginAtZero: false, ticks: { color: '#627d98', font: { size: 11 } }, grid: { color: '#d9e2ec' } },
                 },
               }}
             />
@@ -318,8 +318,8 @@ export function DashboardPage() {
                 datasets: [{
                   label: 'Monthly P/L',
                   data: computed.monthlyValues,
-                  backgroundColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.5)' : 'rgba(244,63,94,0.5)'),
-                  borderColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(16,185,129,0.9)' : 'rgba(244,63,94,0.9)'),
+                  backgroundColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(20,125,100,0.6)' : 'rgba(225,45,57,0.6)'),
+                  borderColor: computed.monthlyValues.map(v => v >= 0 ? 'rgba(20,125,100,0.9)' : 'rgba(225,45,57,0.9)'),
                   borderWidth: 1, borderRadius: 4,
                 }],
               }}
@@ -327,11 +327,11 @@ export function DashboardPage() {
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                   legend: { display: false },
-                  tooltip: { backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: cssVar('--border', 'rgba(56,189,248,0.2)'), borderWidth: 1 },
+                  tooltip: { backgroundColor: cssVar('--panel', 'rgba(4,9,20,0.95)'), titleColor: cssVar('--text-strong', '#f8fafc'), bodyColor: cssVar('--muted2', '#94a3b8'), borderColor: '#d9e2ec', borderWidth: 1 },
                 },
                 scales: {
-                  x: { ticks: { maxTicksLimit: 12, color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
-                  y: { ticks: { color: cssVar('--muted', '#64748b'), font: { size: 11 } }, grid: { color: cssVar('--border', 'rgba(148,163,184,0.06)') } },
+                  x: { ticks: { maxTicksLimit: 12, color: '#627d98', font: { size: 11 } }, grid: { color: '#d9e2ec' } },
+                  y: { ticks: { color: '#627d98', font: { size: 11 } }, grid: { color: '#d9e2ec' } },
                 },
               }}
             />
@@ -343,18 +343,18 @@ export function DashboardPage() {
       {!isLoading && ov?.allocation && Object.keys(ov.allocation).length > 0 && (
         <>
           <div className="sectionTitle">Portfolio Diversification</div>
-          <div className="card panel" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 30, alignItems: 'center' }}>
+          <div className="card panel allocationCard">
+            <div className="allocationGrid">
               
-              <div style={{ textAlign: 'center' }}>
-                <div className="panelTitle" style={{ marginBottom: 20 }}>Asset Mix</div>
-                <div style={{ position: 'relative', height: 220 }}>
+              <div className="allocationSection">
+                <div className="panelTitle allocationTitle">Asset Mix</div>
+                <div className="donutContainer">
                   <Doughnut
                     data={{
                       labels: Object.keys(ov.allocation),
                       datasets: [{
                         data: Object.values(ov.allocation),
-                        backgroundColor: ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4'],
+                        backgroundColor: ['#8719e0', '#147d64', '#e12d39', '#627d98', '#d9e2ec', '#0a6e5c'],
                         borderColor: 'var(--panel)',
                         borderWidth: 3,
                       }],
@@ -375,29 +375,29 @@ export function DashboardPage() {
                       },
                     }}
                   />
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>Assets</div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-strong)' }}>{Object.keys(ov.allocation).length}</div>
+                  <div className="donutOverlay">
+                    <div className="donutOverlayLabel">Assets</div>
+                    <div className="donutOverlayValue">{Object.keys(ov.allocation).length}</div>
                   </div>
                 </div>
               </div>
 
               <div>
-                <div className="panelTitle" style={{ marginBottom: 16 }}>Concentration</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="panelTitle allocationTitle">Concentration</div>
+                <div className="concentrationBars">
                   {(() => {
                     const total = Object.values(ov.allocation).reduce((a, b) => a + (b as number), 0)
                     return Object.entries(ov.allocation).slice(0, 5).map(([label, val], i) => {
-                      const colors = ['#38bdf8', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#06b6d4']
+                      const colors = ['#8719e0', '#147d64', '#e12d39', '#627d98', '#d9e2ec', '#0a6e5c']
                       const pct = total > 0 ? ((val as number) / total) * 100 : 0
                       return (
                         <div key={label}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, fontWeight: 600 }}>
-                            <span style={{ color: 'var(--text)' }}>{label}</span>
-                            <span style={{ color: colors[i % colors.length] }}>{pct.toFixed(1)}%</span>
+                          <div className="concentrationBarHeader">
+                            <span className="concentrationBarLabel">{label}</span>
+                            <span className="concentrationBarPct" style={{ color: colors[i % colors.length] }}>{pct.toFixed(1)}%</span>
                           </div>
-                          <div style={{ height: 6, borderRadius: 999, background: 'var(--bg2)', overflow: 'hidden' }}>
-                            <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, borderRadius: 999, background: colors[i % colors.length], transition: 'width 0.8s ease' }} />
+                          <div className="concentrationBarTrack">
+                            <div className="concentrationBarFill" style={{ width: `${Math.min(100, pct)}%`, background: colors[i % colors.length] }} />
                           </div>
                         </div>
                       )
@@ -406,13 +406,13 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div style={{ textAlign: 'center', borderLeft: '1px solid var(--border)', paddingLeft: 30 }}>
-                <div className="panelTitle" style={{ marginBottom: 10 }}>Health Score</div>
-                <div style={{ padding: '20px 0' }}>
-                  <div style={{ fontSize: 48, fontWeight: 800, color: '#10b981', textShadow: '0 0 20px rgba(16,185,129,0.3)' }}>84</div>
-                  <div className="muted" style={{ fontSize: 12 }}>Optimal Diversification</div>
+              <div className="allocationSection healthScoreSection">
+                <div className="panelTitle allocationTitle">Health Score</div>
+                <div className="healthScoreContent">
+                  <div className="healthScoreValue" style={{ color: '#147d64' }}>84</div>
+                  <div className="muted healthScoreSubtitle">Optimal Diversification</div>
                 </div>
-                <div className="muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
+                <div className="muted healthScoreDescription">
                   Your portfolio concentration is well-balanced across {Object.keys(ov.allocation).length} different assets.
                 </div>
               </div>

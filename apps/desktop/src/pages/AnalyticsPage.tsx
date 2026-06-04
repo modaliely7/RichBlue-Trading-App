@@ -18,16 +18,12 @@ function TopCard(props: { title: string; row: PerfRow | null }) {
           </div>
           <div className="detailsLine">
             <span className="muted">Trades:</span> <span className="mono">{r.count}</span>
-            <span className="muted" style={{ marginLeft: 10 }}>
-              Avg:
-            </span>{' '}
+            <span className="muted">Avg:</span>{' '}
             <span className={r.avg >= 0 ? 'good' : 'bad'}>{formatCurrency(r.avg)}</span>
           </div>
           <div className="detailsLine">
             <span className="muted">Total:</span> <span className={r.total >= 0 ? 'good' : 'bad'}>{formatCurrency(r.total)}</span>
-            <span className="muted" style={{ marginLeft: 10 }}>
-              Win rate:
-            </span>{' '}
+            <span className="muted">Win rate:</span>{' '}
             <span>{formatPct(r.win_rate)}</span>
           </div>
         </div>
@@ -128,11 +124,11 @@ export function AnalyticsPage() {
         </div>
         <div className="detailsActions">
           <label className="muted">
-            <span style={{ marginRight: 8 }}>From</span>
+            <span>From</span>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </label>
           <label className="muted">
-            <span style={{ marginRight: 8 }}>To</span>
+            <span>To</span>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </label>
           <button
@@ -175,11 +171,11 @@ export function AnalyticsPage() {
       {isLoading ? <div className="muted">Loading…</div> : null}
       {error ? <div className="error">Failed to load analytics. Start the API server.</div> : null}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+      <div className="analyticsLayout">
         <div className="mainCol">
           {data ? (
             <>
-              <div className="grid kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <div className="grid kpis">
                 <div className="card kpi">
                   <div className="kpiLabel">Win Rate</div>
                   <div className="kpiValue good">{formatPct(adv.win_rate)}</div>
@@ -195,18 +191,18 @@ export function AnalyticsPage() {
                 <div className="card kpi">
                   <div className="kpiLabel">Avg Win / Loss</div>
                   <div className="kpiValue">
-                    <span className="good" style={{ fontSize: 18 }}>{formatCurrency(adv.avg_win_amount)}</span>
-                    <span style={{ margin: '0 8px', color: 'var(--muted)' }}>/</span>
-                    <span className="bad" style={{ fontSize: 18 }}>{formatCurrency(adv.avg_loss_amount)}</span>
+                    <span className="good">{formatCurrency(adv.avg_win_amount)}</span>
+                    <span className="kpiSep">/</span>
+                    <span className="bad">{formatCurrency(adv.avg_loss_amount)}</span>
                   </div>
                   <div className="kpiSub">Typical trade outcome</div>
                 </div>
                 <div className="card kpi">
                   <div className="kpiLabel">Max Win / Loss</div>
                   <div className="kpiValue">
-                    <span className="good" style={{ fontSize: 18 }}>{formatCurrency(adv.max_win_amount)}</span>
-                    <span style={{ margin: '0 8px', color: 'var(--muted)' }}>/</span>
-                    <span className="bad" style={{ fontSize: 18 }}>{formatCurrency(adv.max_loss_amount)}</span>
+                    <span className="good">{formatCurrency(adv.max_win_amount)}</span>
+                    <span className="kpiSep">/</span>
+                    <span className="bad">{formatCurrency(adv.max_loss_amount)}</span>
                   </div>
                   <div className="kpiSub">Extremes recorded</div>
                 </div>
@@ -222,7 +218,7 @@ export function AnalyticsPage() {
                 </div>
               </div>
 
-              <div className="card panel" style={{ marginTop: 20 }}>
+              <div className="card panel">
                 <div className="panelTitle">Monthly Performance History</div>
                 <div className="chartWrapper small">
                   <Bar
@@ -232,11 +228,11 @@ export function AnalyticsPage() {
                         {
                           label: 'PnL',
                           data: monthChart.values,
-                          backgroundColor: monthChart.values.map((v) =>
-                            v >= 0 ? 'rgba(34,197,94,0.55)' : 'rgba(239,68,68,0.55)',
+                           backgroundColor: monthChart.values.map((v) =>
+                            v >= 0 ? 'rgba(20, 125, 100, 0.6)' : 'rgba(225, 45, 57, 0.6)',
                           ) as any,
                           borderColor: monthChart.values.map((v) =>
-                            v >= 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
+                            v >= 0 ? 'rgba(20, 125, 100, 0.9)' : 'rgba(225, 45, 57, 0.9)',
                           ) as any,
                           borderWidth: 1,
                         },
@@ -247,19 +243,19 @@ export function AnalyticsPage() {
                       maintainAspectRatio: false,
                       plugins: { legend: { display: false } },
                       scales: {
-                        x: { ticks: { color: 'var(--muted2)' }, grid: { color: 'var(--border)' } },
-                        y: { ticks: { color: 'var(--muted2)' }, grid: { color: 'var(--border)' } },
+                        x: { ticks: { color: '#627d98' }, grid: { color: '#d9e2ec' } },
+                        y: { ticks: { color: '#627d98' }, grid: { color: '#d9e2ec' } },
                       },
                     }}
                   />
                 </div>
               </div>
 
-              <div className="grid panels" style={{ marginTop: 20 }}>
+              <div className="grid panels">
                 <Table title="Market Performance" rows={data?.by_market ?? []} />
               </div>
 
-              <div style={{ marginTop: 20 }}>
+              <div className="panel">
                 <Table title="Strategy Breakdown" rows={data?.by_strategy ?? []} />
               </div>
             </>
@@ -268,15 +264,15 @@ export function AnalyticsPage() {
 
         <div className="sideCol">
           <div className="sectionTitle">Highlights</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="sideColCards">
             <TopCard title="Top Strategy" row={data?.best_strategy ?? null} />
             <TopCard title="Bottom Strategy" row={data?.worst_strategy ?? null} />
             <TopCard title="Best Day" row={data?.best_day ?? null} />
             <TopCard title="Best Hour" row={data?.best_hour ?? null} />
           </div>
 
-          <div className="sectionTitle" style={{ marginTop: 30 }}>Time Analysis</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="sectionTitle">Time Analysis</div>
+          <div className="sideColCards">
             <Table title="By Day of Week" rows={data?.by_day_of_week ?? []} />
             <Table title="By Hour of Day" rows={data?.by_hour ?? []} />
           </div>

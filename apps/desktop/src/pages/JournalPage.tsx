@@ -135,11 +135,11 @@ function DividendModal({
   const selectedTrade = trades.find(t => t.id === tradeId)
 
   return (
-    <div className="modalOverlay" onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
+    <div className="modalOverlay" onClick={onClose}>
       <div className="card panel" onClick={e => e.stopPropagation()} style={{ width: 450, maxWidth: '90%', border: '1px solid var(--accent-dim)' }}>
         <div className="panelTitle">Record Dividend</div>
-        <div className="muted" style={{ marginBottom: 16, fontSize: 13 }}>Link a dividend payment or stock bonus to an open trade.</div>
-        <div className="formGrid" style={{ marginTop: 12 }}>
+        <div className="muted">Link a dividend payment or stock bonus to an open trade.</div>
+        <div className="formGrid">
           <label className="span2">
             <div className="label">Linked Trade (Open Only)</div>
             <select value={tradeId || ''} onChange={e => setTradeId(Number(e.target.value))}>
@@ -168,7 +168,7 @@ function DividendModal({
             <div className="label">Note</div>
             <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional description" />
           </label>
-          <div className="detailsActions span2" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
+          <div className="detailsActions span2" style={{ justifyContent: 'flex-end' }}>
             <button className="btnGhost" onClick={onClose}>Cancel</button>
             <button className="btn" disabled={!tradeId || !amount || mutation.isPending} onClick={() => {
               mutation.mutate({
@@ -365,8 +365,8 @@ export function JournalPage() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: '12px 16px', marginBottom: 16, background: 'var(--panel-light)', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        <span className="muted" style={{ fontSize: 13 }}>Filter by Strategy:</span>
+      <div className="card" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <span className="muted">Filter by Strategy:</span>
         <span 
           className={`statusPill ${!tradeSearch ? 'status-ok' : ''}`} 
           style={{ cursor: 'pointer', opacity: !tradeSearch ? 1 : 0.6 }}
@@ -393,12 +393,12 @@ export function JournalPage() {
       {isLoading ? <div className="muted">Loading…</div> : null}
       {error ? <div className="error">Failed to load trades. Start the API server.</div> : null}
 
-      <div className="tradeSplit" style={{ marginTop: 16 }}>
+      <div className="tradeSplit">
         <div className="card panel" style={{ minWidth: 0 }}>
           <div className="panelTitleRow">
             <div className="panelTitle">Trades</div>
             <div className="detailsActions" style={{ justifyContent: 'flex-end' }}>
-              <div className="muted" style={{ fontSize: 12, marginRight: 12 }}>
+              <div className="muted">
                 Bought: {formatCurrency(totalBought)} | Sold: {formatCurrency(totalSold)}
               </div>
               <input className="miniInput" style={{ width: 180 }} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="Search symbol…" />
@@ -409,7 +409,7 @@ export function JournalPage() {
               </select>
             </div>
           </div>
-          <div className="tableWrap" style={{ overflowX: 'auto' }}>
+          <div className="tableWrap">
             <table className="table">
               <thead>
                 <tr>
@@ -529,10 +529,10 @@ export function JournalPage() {
                   </div>
                   <div className="detailsLine" style={{ borderTop: '1px solid var(--border)', paddingTop: 4, marginTop: 4 }}>
                     <span className="muted">Total fees:</span>{' '}
-                    <span className="mono" style={{ fontWeight: 700 }}>{formatCurrency((selectedTrade.fees ?? 0) + (selectedTrade.exit_fees ?? 0))}</span>
+                    <span className="mono">{formatCurrency((selectedTrade.fees ?? 0) + (selectedTrade.exit_fees ?? 0))}</span>
                   </div>
 
-                  <div className="detailsActions" style={{ marginTop: 10 }}>
+                  <div className="detailsActions">
                     <button type="button" className="btn" onClick={beginEdit}>
                       Edit trade
                     </button>
@@ -561,7 +561,7 @@ export function JournalPage() {
                   </div>
                 </>
               ) : (
-                <div className="formGrid detailsForm" style={{ marginTop: 8 }}>
+                <div className="formGrid detailsForm">
                   <label>
                     <div className="label">Symbol</div>
                     <input value={draft.symbol} onChange={(e) => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })} />
@@ -695,8 +695,8 @@ export function JournalPage() {
               )}
 
               {selectedTrade.screenshot_path ? (
-                <div style={{ marginTop: 14 }}>
-                  <div className="label" style={{ marginBottom: 8 }}>
+                <div>
+                  <div className="label">
                     Screenshot
                   </div>
                   <div className="detailsActions" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
@@ -741,23 +741,13 @@ export function JournalPage() {
       {lightboxUrl ? (
         <div
           role="presentation"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            background: 'rgba(0,0,0,0.85)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-            cursor: 'zoom-out',
-          }}
+          className="lightboxOverlay"
           onClick={() => setLightboxUrl(null)}
         >
           <img
             src={lightboxUrl}
             alt="Screenshot"
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', cursor: 'default' }}
+            className="lightboxImage"
             onClick={(e) => e.stopPropagation()}
           />
         </div>
