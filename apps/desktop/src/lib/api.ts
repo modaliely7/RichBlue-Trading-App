@@ -243,6 +243,37 @@ export type EodSchedule = {
   updated_at: string
 }
 
+export type PlaybookSetup = {
+  id: number
+  playbook_id: number
+  name: string
+  description: string | null
+  entry_rules: string | null
+  exit_rules: string | null
+  image_path: string | null
+  order_index: number
+  created_at: string
+}
+
+export type PlaybookSetupCreate = Omit<PlaybookSetup, 'id' | 'playbook_id' | 'created_at'>
+export type PlaybookSetupUpdate = Partial<PlaybookSetupCreate>
+
+export type Playbook = {
+  id: number
+  account_id: number
+  name: string
+  description: string | null
+  color: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  setup_count: number
+  setups: PlaybookSetup[]
+}
+
+export type PlaybookCreate = Omit<Playbook, 'id' | 'account_id' | 'created_at' | 'updated_at' | 'setup_count' | 'setups'>
+export type PlaybookUpdate = Partial<Omit<Playbook, 'id' | 'account_id' | 'created_at' | 'updated_at' | 'setup_count' | 'setups'>>
+
 export type LessonCategory = 'Mistake' | 'Lesson' | 'Psychological note' | 'Strategy insight'
 
 export type Lesson = {
@@ -279,8 +310,18 @@ export type Trade = {
   pnl: number | null
   return_pct: number | null
   risk_reward: number | null
+  r_multiple_actual: number | null
   duration_seconds: number | null
   strategies: Strategy[]
+  pre_trade_plan: string | null
+  pre_trade_emotion: string | null
+  r_plan: number | null
+  process_grade: number | null
+  r_multiple_grade: number | null
+  playbook_id: number | null
+  playbook_setup_id: number | null
+  playbook_name: string | null
+  playbook_setup_name: string | null
 }
 
 export type TradeCreate = Omit<
@@ -289,10 +330,15 @@ export type TradeCreate = Omit<
   | 'pnl'
   | 'return_pct'
   | 'risk_reward'
+  | 'r_multiple_actual'
   | 'duration_seconds'
   | 'screenshot_path'
   | 'strategies'
-> & { strategy_ids?: number[] }
+  | 'playbook_name'
+  | 'playbook_setup_name'
+  | 'process_grade'
+  | 'r_multiple_grade'
+> & { strategy_ids?: number[]; process_grade?: number | null; r_multiple_grade?: number | null }
 
 export type TradeUpdate = Partial<
   Pick<
@@ -311,6 +357,13 @@ export type TradeUpdate = Partial<
     | 'exit_fees'
     | 'notes'
     | 'lessons_learned'
+    | 'pre_trade_plan'
+    | 'pre_trade_emotion'
+    | 'r_plan'
+    | 'process_grade'
+    | 'r_multiple_grade'
+    | 'playbook_id'
+    | 'playbook_setup_id'
   > & { strategy_ids?: number[] }
 >
 
@@ -527,6 +580,23 @@ export const api = {
   updateStrategy: (id: number, payload: StrategyUpdate) =>
     apiFetch<Strategy>(`/strategies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteStrategy: (id: number) => apiFetch<{ deleted: true }>(`/strategies/${id}`, { method: 'DELETE' }),
+
+  listPlaybooks: (accountId: number = 1) => apiFetch<Playbook[]>(`/playbooks?account_id=${accountId}`),
+  getPlaybook: (id: number) => apiFetch<Playbook>(`/playbooks/${id}`),
+  createPlaybook: (payload: PlaybookCreate, accountId: number = 1) =>
+    apiFetch<Playbook>(`/playbooks?account_id=${accountId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  updatePlaybook: (id: number, payload: PlaybookUpdate) =>
+    apiFetch<Playbook>(`/playbooks/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deletePlaybook: (id: number) => apiFetch<{ deleted: true }>(`/playbooks/${id}`, { method: 'DELETE' }),
+
+  listPlaybookSetups: (playbookId: number) =>
+    apiFetch<PlaybookSetup[]>(`/playbooks/${playbookId}/setups`),
+  createPlaybookSetup: (playbookId: number, payload: PlaybookSetupCreate) =>
+    apiFetch<PlaybookSetup>(`/playbooks/${playbookId}/setups`, { method: 'POST', body: JSON.stringify(payload) }),
+  updatePlaybookSetup: (playbookId: number, setupId: number, payload: PlaybookSetupUpdate) =>
+    apiFetch<PlaybookSetup>(`/playbooks/${playbookId}/setups/${setupId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deletePlaybookSetup: (playbookId: number, setupId: number) =>
+    apiFetch<{ deleted: true }>(`/playbooks/${playbookId}/setups/${setupId}`, { method: 'DELETE' }),
 
   // Market data (Phase 6)
   listEgxSymbols: (query?: string, limit: number = 50) => {

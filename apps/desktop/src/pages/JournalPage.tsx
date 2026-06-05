@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
-import { api, tradeScreenshotPublicUrl, type OverviewResponse } from '../lib/api'
+import { api, tradeScreenshotPublicUrl, type OverviewResponse, type Playbook, type PlaybookSetup } from '../lib/api'
 import type { Market, Trade, TradeUpdate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
@@ -65,6 +65,13 @@ type TradeDraft = {
   strategy_ids: number[]
   indicators_used: string
   lessons_learned: string
+  pre_trade_plan: string
+  pre_trade_emotion: string
+  r_plan: string
+  process_grade: number | null
+  r_multiple_grade: number | null
+  playbook_id: number | ''
+  playbook_setup_id: number | ''
 }
 
 function tradeToDraft(t: Trade): TradeDraft {
@@ -81,7 +88,14 @@ function tradeToDraft(t: Trade): TradeDraft {
     notes: t.notes || '',
     strategy_ids: (t.strategies || []).map(s => s.id),
     indicators_used: t.indicators_used || '',
-    lessons_learned: t.lessons_learned || ''
+    lessons_learned: t.lessons_learned || '',
+    pre_trade_plan: t.pre_trade_plan || '',
+    pre_trade_emotion: t.pre_trade_emotion || '',
+    r_plan: t.r_plan == null ? '' : String(t.r_plan),
+    process_grade: t.process_grade,
+    r_multiple_grade: t.r_multiple_grade,
+    playbook_id: t.playbook_id ?? '',
+    playbook_setup_id: t.playbook_setup_id ?? '',
   }
 }
 
@@ -191,6 +205,11 @@ export function JournalPage() {
     queryFn: () => api.listStrategies(accountId)
   })
 
+  const { data: playbooks = [] } = useQuery<Playbook[]>({
+    queryKey: ['playbooks', accountId],
+    queryFn: () => api.listPlaybooks(accountId)
+  })
+
   const [tradeSearch, setTradeSearch] = useState<string>('')
   const [tradeStatus, setTradeStatus] = useState<'all' | 'open' | 'closed'>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -199,6 +218,12 @@ export function JournalPage() {
   const [draft, setDraft] = useState<TradeDraft | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [isAutoFeesEdit, setIsAutoFeesEdit] = useState(true)
+
+  const { data: editSetups = [] } = useQuery<PlaybookSetup[]>({
+    queryKey: ['playbook-setups', draft?.playbook_id],
+    queryFn: () => api.listPlaybookSetups(draft?.playbook_id as number),
+    enabled: typeof draft?.playbook_id === 'number',
+  })
 
   const createStrategyForEditMutation = useMutation({
     mutationFn: (name: string) => api.createStrategy({ name }, accountId),
@@ -333,6 +358,13 @@ export function JournalPage() {
         exit_date: draft.exit_date.trim() ? new Date(draft.exit_date).toISOString() : null,
         notes: draft.notes.trim() || null,
         lessons_learned: draft.lessons_learned.trim() || null,
+        pre_trade_plan: draft.pre_trade_plan.trim() || null,
+        pre_trade_emotion: draft.pre_trade_emotion.trim() || null,
+        r_plan: draft.r_plan.trim() === '' ? null : parseFloat(draft.r_plan),
+        process_grade: draft.process_grade,
+        r_multiple_grade: draft.r_multiple_grade,
+        playbook_id: draft.playbook_id === '' ? null : draft.playbook_id,
+        playbook_setup_id: draft.playbook_setup_id === '' ? null : draft.playbook_setup_id,
       },
     })
   }
@@ -420,6 +452,8 @@ export function JournalPage() {
                   <th>PnL</th>
                   <th>Return</th>
                   <th>Strategies</th>
+                  <th>Playbook</th>
+                  <th>Grades</th>
                   <th>Style</th>
                   <th>Duration</th>
                   <th />
@@ -459,6 +493,29 @@ export function JournalPage() {
                         {(!t.strategies || t.strategies.length === 0) && <span className="muted">—</span>}
                       </div>
                     </td>
+                    <td>
+                      {t.playbook_name ? (
+                        <div className="strategyChips">
+                          <span className="statusPill">{t.playbook_name}</span>
+                          {t.playbook_setup_name && <span className="statusPill" style={{ opacity: 0.7 }}>{t.playbook_setup_name}</span>}
+                        </div>
+                      ) : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11 }}>
+                        <span>
+                          <span className="muted">P:</span>{' '}
+                          <span className="gradeReadOnly">{t.process_grade ?? '—'}</span>
+                        </span>
+                        <span>
+                          <span className="muted">R:</span>{' '}
+                          <span className="gradeReadOnly">{t.r_multiple_grade ?? '—'}</span>
+                          {t.r_multiple_actual != null && (
+                            <span className="muted"> ({t.r_multiple_actual.toFixed(2)}R)</span>
+                          )}
+                        </span>
+                      </div>
+                    </td>
                     <td>{getTradeStyle(t.entry_date, t.exit_price != null ? (t.exit_date || new Date().toISOString()) : null)}</td>
                     <td>{formatDuration(t.duration_seconds)}</td>
                     <td>
@@ -478,7 +535,7 @@ export function JournalPage() {
                 ))}
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="muted">
+                    <td colSpan={16} className="muted">
                       No trades yet.
                     </td>
                   </tr>
@@ -669,6 +726,110 @@ export function JournalPage() {
                   <label className="span2">
                     <div className="label">Lessons Learned</div>
                     <textarea rows={2} value={draft.lessons_learned} onChange={(e) => setDraft({ ...draft, lessons_learned: e.target.value })} />
+                  </label>
+
+                  <div className="span4" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                    <div className="label" style={{ fontSize: 13, fontWeight: 600 }}>Pre-Trade Plan</div>
+                  </div>
+
+                  <label>
+                    <div className="label">Playbook</div>
+                    <select
+                      value={draft.playbook_id === '' ? '' : String(draft.playbook_id)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setDraft({ ...draft, playbook_id: v === '' ? '' : Number(v), playbook_setup_id: '' })
+                      }}
+                    >
+                      <option value="">— None —</option>
+                      {playbooks.map((p) => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <div className="label">Setup</div>
+                    <select
+                      value={draft.playbook_setup_id === '' ? '' : String(draft.playbook_setup_id)}
+                      onChange={(e) => setDraft({ ...draft, playbook_setup_id: e.target.value === '' ? '' : Number(e.target.value) })}
+                      disabled={draft.playbook_id === ''}
+                    >
+                      <option value="">— {draft.playbook_id === '' ? 'Select a playbook first' : 'None'} —</option>
+                      {editSetups.map((s) => (
+                        <option key={s.id} value={String(s.id)}>{s.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <div className="label">Emotion before entry</div>
+                    <select value={draft.pre_trade_emotion} onChange={(e) => setDraft({ ...draft, pre_trade_emotion: e.target.value })}>
+                      <option value="">—</option>
+                      <option value="Calm">Calm</option>
+                      <option value="Confident">Confident</option>
+                      <option value="Anxious">Anxious</option>
+                      <option value="Fearful">Fearful</option>
+                      <option value="Greedy">Greedy</option>
+                      <option value="FOMO">FOMO</option>
+                      <option value="Hesitant">Hesitant</option>
+                      <option value="Revenge">Revenge</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <div className="label">Planned R-multiple</div>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={draft.r_plan}
+                      onChange={(e) => setDraft({ ...draft, r_plan: e.target.value })}
+                    />
+                  </label>
+
+                  <label className="span4">
+                    <div className="label">Pre-trade plan (your reason for taking this trade)</div>
+                    <textarea
+                      rows={3}
+                      value={draft.pre_trade_plan}
+                      onChange={(e) => setDraft({ ...draft, pre_trade_plan: e.target.value })}
+                    />
+                  </label>
+
+                  <label className="span2">
+                    <div className="label">Process grade (1-5)</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setDraft({ ...draft, process_grade: draft.process_grade === n ? null : n })}
+                          className="gradeStar"
+                          data-filled={draft.process_grade != null && n <= draft.process_grade}
+                          aria-label={`Set process grade ${n}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+
+                  <label className="span2">
+                    <div className="label">R-multiple grade (1-5)</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setDraft({ ...draft, r_multiple_grade: draft.r_multiple_grade === n ? null : n })}
+                          className="gradeStar"
+                          data-filled={draft.r_multiple_grade != null && n <= draft.r_multiple_grade}
+                          aria-label={`Set r-multiple grade ${n}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
                   </label>
                   <div className="detailsActions span2 editFormActions">
                     <Button disabled={updateMutation.isPending} onClick={saveDraft}>Save changes</Button>

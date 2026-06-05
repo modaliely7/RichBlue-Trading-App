@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, Ruler } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
-import { api, type OverviewResponse, type Strategy } from '../lib/api'
+import { api, type OverviewResponse, type Strategy, type Playbook, type PlaybookSetup } from '../lib/api'
 import type { Market, TradeCreate } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
@@ -67,6 +67,11 @@ export function AddTradePage() {
   const [lessonsLearned, setLessonsLearned] = useState('')
   const [notes, setNotes] = useState('')
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<number[]>([])
+  const [preTradePlan, setPreTradePlan] = useState('')
+  const [preTradeEmotion, setPreTradeEmotion] = useState('')
+  const [rPlan, setRPlan] = useState('')
+  const [playbookId, setPlaybookId] = useState<number | ''>('')
+  const [setupId, setSetupId] = useState<number | ''>('')
 
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectedName, setDetectedName] = useState<string | null>(null)
@@ -145,6 +150,18 @@ export function AddTradePage() {
   const { data: strategies = [] } = useQuery<Strategy[]>({
     queryKey: ['strategies', accountId],
     queryFn: () => api.listStrategies(accountId)
+  })
+
+  const { data: playbooks = [] } = useQuery<Playbook[]>({
+    queryKey: ['playbooks', accountId],
+    queryFn: () => api.listPlaybooks(accountId)
+  })
+
+  const activePlaybook = playbookId !== '' ? playbooks.find((p) => p.id === playbookId) ?? null : null
+  const { data: setups = [] } = useQuery<PlaybookSetup[]>({
+    queryKey: ['playbook-setups', playbookId],
+    queryFn: () => api.listPlaybookSetups(playbookId as number),
+    enabled: playbookId !== '',
   })
 
   const createMutation = useMutation({
@@ -325,6 +342,77 @@ export function AddTradePage() {
                 <div className="label">Lessons Learned (Post-Trade)</div>
                 <textarea rows={2} value={lessonsLearned} onChange={(e) => setLessonsLearned(e.target.value)} placeholder="What went well? What to avoid?" />
               </label>
+
+              <div className="span4" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                <div className="label" style={{ fontSize: 13, fontWeight: 600 }}>Pre-Trade Plan</div>
+              </div>
+
+              <label>
+                <div className="label">Playbook</div>
+                <select
+                  value={playbookId === '' ? '' : String(playbookId)}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setPlaybookId(v === '' ? '' : Number(v))
+                    setSetupId('')
+                  }}
+                >
+                  <option value="">— None —</option>
+                  {playbooks.filter((p) => p.is_active).map((p) => (
+                    <option key={p.id} value={String(p.id)}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <div className="label">Setup</div>
+                <select
+                  value={setupId === '' ? '' : String(setupId)}
+                  onChange={(e) => setSetupId(e.target.value === '' ? '' : Number(e.target.value))}
+                  disabled={!activePlaybook}
+                >
+                  <option value="">— {activePlaybook ? 'None' : 'Select a playbook first'} —</option>
+                  {setups.map((s) => (
+                    <option key={s.id} value={String(s.id)}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <div className="label">Emotion before entry</div>
+                <select value={preTradeEmotion} onChange={(e) => setPreTradeEmotion(e.target.value)}>
+                  <option value="">—</option>
+                  <option value="Calm">Calm</option>
+                  <option value="Confident">Confident</option>
+                  <option value="Anxious">Anxious</option>
+                  <option value="Fearful">Fearful</option>
+                  <option value="Greedy">Greedy</option>
+                  <option value="FOMO">FOMO</option>
+                  <option value="Hesitant">Hesitant</option>
+                  <option value="Revenge">Revenge</option>
+                </select>
+              </label>
+
+              <label>
+                <div className="label">Planned R-multiple</div>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={rPlan}
+                  onChange={(e) => setRPlan(e.target.value)}
+                  placeholder="e.g. 2"
+                />
+              </label>
+
+              <label className="span4">
+                <div className="label">Pre-trade plan (your reason for taking this trade)</div>
+                <textarea
+                  rows={3}
+                  value={preTradePlan}
+                  onChange={(e) => setPreTradePlan(e.target.value)}
+                  placeholder="Why this setup? What's the entry, stop, target?"
+                />
+              </label>
             </div>
           </div>
         </div>
@@ -485,6 +573,11 @@ export function AddTradePage() {
                     exit_fees: exitFeesNum,
                     notes: notes.trim() || null,
                     lessons_learned: lessonsLearned.trim() || null,
+                    pre_trade_plan: preTradePlan.trim() || null,
+                    pre_trade_emotion: preTradeEmotion.trim() || null,
+                    r_plan: rPlan.trim() === '' ? null : parseFloat(rPlan),
+                    playbook_id: playbookId === '' ? null : playbookId,
+                    playbook_setup_id: setupId === '' ? null : setupId,
                   })
                 }}
               >

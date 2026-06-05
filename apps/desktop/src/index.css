@@ -718,6 +718,28 @@ textarea:focus {
   color: var(--accent);
 }
 
+.gradeStar {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--border);
+  transition: color 0.1s ease;
+}
+.gradeStar[data-filled="true"] {
+  color: var(--amber, #f59e0b);
+}
+.gradeStar:hover {
+  color: var(--amber, #f59e0b);
+}
+
+.gradeReadOnly {
+  font-weight: 600;
+  color: var(--amber, #f59e0b);
+}
+
 /* ─── Risk Banner ──────────────────────────────────────── */
 
 /* ─── Risk Banner ──────────────────────────────────────── */

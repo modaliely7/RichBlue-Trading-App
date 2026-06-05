@@ -13,6 +13,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { CashPage } from './pages/CashPage'
 import { StrategiesPage } from './pages/StrategiesPage'
+import { PlaybooksPage } from './pages/PlaybooksPage'
 import { AddTradePage } from './pages/AddTradePage'
 import { DataPage } from './pages/DataPage'
 import { PsychologyPage } from './pages/PsychologyPage'
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/cash" element={<CashPage />} />
           <Route path="/strategies" element={<StrategiesPage />} />
+          <Route path="/playbooks" element={<PlaybooksPage />} />
           <Route path="/psychology" element={<PsychologyPage />} />
           <Route path="/lessons" element={<LessonsPage />} />
           <Route path="/trades/add" element={<AddTradePage />} />
