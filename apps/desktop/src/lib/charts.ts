@@ -56,7 +56,7 @@ export interface ChartTheme {
   warn: string
 }
 
-export function getChartTheme(theme: Theme): ChartTheme {
+export function getChartTheme(): ChartTheme {
   return {
     text: cssVar('--muted', FALLBACK.text),
     textStrong: cssVar('--text-strong', FALLBACK.textStrong),
@@ -71,7 +71,8 @@ export function getChartTheme(theme: Theme): ChartTheme {
 }
 
 export function applyChartTheme(theme: Theme) {
-  const t = getChartTheme(theme)
+  void theme
+  const t = getChartTheme()
 
   ChartJS.defaults.color = t.text
   ChartJS.defaults.borderColor = t.border
@@ -84,8 +85,9 @@ export function applyChartTheme(theme: Theme) {
   ChartJS.defaults.plugins.tooltip.cornerRadius = 8
   ChartJS.defaults.plugins.tooltip.padding = 12
 
-  ChartJS.defaults.datasets.color = t.accent
-  ChartJS.defaults.datasets.borderColor = t.accent
+  const datasets = ChartJS.defaults.datasets as { color?: string; borderColor?: string }
+  datasets.color = t.accent
+  datasets.borderColor = t.accent
 }
 
 // Apply default light theme on module load
