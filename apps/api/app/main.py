@@ -23,6 +23,7 @@ from .routes import (
     assets,
     cash,
     health_accounts,
+    insights,
     lessons,
     market_data,
     overview,
@@ -143,6 +144,7 @@ app.mount("/static", StaticFiles(directory=str(_API_DATA_BASE)), name="static")
 app.include_router(health_accounts.router)
 app.include_router(strategies.router)
 app.include_router(playbooks.router)
+app.include_router(insights.router)
 app.include_router(assets.router)
 app.include_router(symbols.router)
 app.include_router(trades.router)

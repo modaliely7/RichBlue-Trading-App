@@ -90,6 +90,7 @@ hidden_imports = [
     "app.routes.settings",
     "app.routes.playbooks",
     "app.routes.market_data",
+    "app.routes.insights",
 ]
 
 # ── Data files to bundle alongside the exe ────────────────────────────────────
