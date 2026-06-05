@@ -50,7 +50,6 @@ export function PortfolioPage() {
       })
       setDividendSymbol(null)
       setDividendAmount('')
-      // Invalidate affected queries instead of full page reload
       await qc.invalidateQueries({ queryKey: ['overview'] })
       await qc.invalidateQueries({ queryKey: ['cash'] })
     } catch (e) {
@@ -74,16 +73,15 @@ export function PortfolioPage() {
     const netDep = Number(ov?.kpis.net_deposited ?? 0)
     const realizedPnl = Number(ov?.kpis.realized_pnl_total ?? 0)
     const assetsCost = Number(ov?.kpis.assets_market_value ?? 0)
-    
+
     const pv = Number(ov?.kpis.portfolio_value ?? 0)
     const totalPnL = Number(ov?.kpis.total_return_value ?? 0)
     const returnPct = Number(ov?.kpis.total_return_pct ?? 0)
-    
-    // Ledger validation (Cash + Cost Basis should equal Net Dep + Realized PnL)
+
     const realizedFromLedger = cash + assetsCost
     const realizedFromPnL = netDep + realizedPnl
     const mismatch = Math.abs(realizedFromLedger - realizedFromPnL) > 0.01
-    
+
     return { pv, totalPnL, returnPct, realizedFromLedger, realizedFromPnL, mismatch, netDep, realizedPnl, cash, assetsCost }
   }, [ov])
 
@@ -102,11 +100,10 @@ export function PortfolioPage() {
         values.push(v)
       }
     }
-    // Add individual fund symbols from fund_allocation dict
     const stockSymbols = new Set(openHoldings.map(h => h.symbol))
     const fundAlloc = ov?.fund_allocation ?? {}
     for (const [sym, val] of Object.entries(fundAlloc)) {
-      if (stockSymbols.has(sym)) continue // already in holdings
+      if (stockSymbols.has(sym)) continue
       if (Number(val) > 1e-9) {
         labels.push(sym)
         values.push(Number(val))
@@ -118,7 +115,6 @@ export function PortfolioPage() {
     return { labels, values, pct, total, bg, border }
   }, [metrics.cash, openHoldings, method, ov?.fund_allocation])
 
-  // Earnings breakdown by asset class (Stocks vs Funds)
   const earningsPie = useMemo(() => {
     const ea = ov?.earnings_allocation ?? {}
     const labels = Object.keys(ea)
@@ -133,11 +129,10 @@ export function PortfolioPage() {
   const earningsChart = useMemo(() => {
     if (!ov?.chart) return null
     const labels = ov.chart.labels
-    // total_pnl includes unrealized, total_return_value is realized only
     const values = (method === 'liquidation' && ov.chart.total_pnl) ? ov.chart.total_pnl : ov.chart.total_return_value
-    
+
     if (pnlPeriod === 'ALL' || !labels.length) return { labels, values }
-    
+
     let indices: number[] = []
     if (pnlPeriod === 'CUSTOM' && customStart && customEnd) {
       indices = labels.map((l, i) => (l >= customStart && l <= customEnd ? i : -1)).filter(i => i !== -1)
@@ -148,10 +143,10 @@ export function PortfolioPage() {
       else if (pnlPeriod === '6M') start.setMonth(now.getMonth() - 6)
       else if (pnlPeriod === '1Y') start.setFullYear(now.getFullYear() - 1)
       else if (pnlPeriod === 'YTD') start = new Date(now.getFullYear(), 0, 1)
-      
+
       indices = labels.map((l, i) => (new Date(l) >= start ? i : -1)).filter(i => i !== -1)
     }
-    
+
     return {
       labels: indices.map(i => labels[i]),
       values: indices.map(i => values[i])
@@ -167,10 +162,10 @@ export function PortfolioPage() {
         </div>
         <div className="detailsActions">
           <OverviewSyncBar />
-            <select value={method} onChange={(e) => setMethod(e.target.value)}>
-              <option value="realized">Realized view</option>
-              <option value="liquidation">With unrealized (liquidation)</option>
-            </select>
+          <select value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="realized">Realized view</option>
+            <option value="liquidation">With unrealized (liquidation)</option>
+          </select>
         </div>
       </div>
 
@@ -220,17 +215,16 @@ export function PortfolioPage() {
       </div>
 
       <div className="grid panels">
-        {/* Portfolio Mix Pie */}
         <div className="card panel">
           <div className="panelTitle">Portfolio mix (pie)</div>
-          <div className="muted mt4" style={{ fontSize: 13 }}>
+          <div className="muted panelSubtitle">
             Current allocation: cash + holdings at cost (or market value).
           </div>
           {portfolioPie.total <= 0 ? (
             <div className="muted mt16">No cash or positions yet.</div>
           ) : (
             <>
-              <div className="chartWrapper" style={{ maxWidth: 380, margin: '16px auto 0', height: 280 }}>
+              <div className="chartWrapper chartWrapperCentered">
                 <Pie
                   data={{
                     labels: portfolioPie.labels,
@@ -259,24 +253,23 @@ export function PortfolioPage() {
                   }}
                 />
               </div>
-              <div className="muted mt12 textCenter" style={{ fontSize: 13 }}>
+              <div className="muted mt12 textCenter panelSubtitle">
                 Pie total: <span className="mono">{formatCurrency(portfolioPie.total)}</span>
               </div>
             </>
           )}
         </div>
 
-        {/* Earnings by Asset Class (Stocks vs Funds) — Doughnut */}
         <div className="card panel">
           <div className="panelTitle">Earnings by Asset Class</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+          <div className="muted panelSubtitle">
             Realized P/L split across Stocks and Funds{method === 'liquidation' ? ' (inc. unrealized)' : ''}.
           </div>
           {!earningsPie ? (
-            <div className="muted" style={{ marginTop: 16 }}>No closed trades yet — earnings will appear here.</div>
+            <div className="muted mt16">No closed trades yet — earnings will appear here.</div>
           ) : (
             <>
-              <div style={{ position: 'relative', height: 240, marginTop: 16 }}>
+              <div className="chartDoughnut">
                 <Doughnut
                   data={{
                     labels: earningsPie.labels,
@@ -306,16 +299,18 @@ export function PortfolioPage() {
                   }}
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              <div className="earningsLegend">
                 {earningsPie.labels.map((lbl, i) => {
                   const val = earningsPie.values[i]
                   return (
-                    <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: earningsPie.bg[i] }} />
+                    <div key={lbl} className="earningsLegendRow">
+                      <span className="earningsLegendLabel">
+                        <span className="earningsLegendDot" style={{ background: earningsPie.bg[i] }} />
                         <span>{lbl}</span>
                       </span>
-                      <span className={`mono ${val >= 0 ? 'good' : 'bad'}`}>{val >= 0 ? '+' : ''}{formatCurrency(val)}</span>
+                      <span className={`mono ${val >= 0 ? 'good' : 'bad'}`}>
+                        {val >= 0 ? '+' : ''}{formatCurrency(val)}
+                      </span>
                     </div>
                   )
                 })}
@@ -324,36 +319,34 @@ export function PortfolioPage() {
           )}
         </div>
 
-        {/* Portfolio Earnings — Cumulative Line Chart */}
-        <div className="card panel" style={{ gridColumn: '1 / -1' }}>
-          <div className="panelHeader" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="card panel fullPanel">
+          <div className="panelHeader">
             <div className="panelTitle">Portfolio Earnings (Cumulative)</div>
-            <div className="periodSelect" style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="periodSelector">
               {['1M', '6M', '1Y', 'YTD', 'ALL', 'CUSTOM'].map(p => (
                 <button
                   key={p}
-                  className={`btn-small ${pnlPeriod === p ? 'active' : ''}`}
+                  className={`btn-small periodBtn ${pnlPeriod === p ? 'active' : ''}`}
                   onClick={() => setPnlPeriod(p)}
-                  style={{ marginLeft: 4, padding: '2px 8px', fontSize: 11 }}
                 >
                   {p}
                 </button>
               ))}
               {pnlPeriod === 'CUSTOM' && (
-                <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
-                  <input type="date" className="miniInput" style={{ padding: '2px 4px', fontSize: 11 }} value={customStart} onChange={e => setCustomStart(e.target.value)} />
-                  <input type="date" className="miniInput" style={{ padding: '2px 4px', fontSize: 11 }} value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+                <div className="periodDateRow">
+                  <input type="date" className="miniInput periodDateInput" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+                  <input type="date" className="miniInput periodDateInput" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
                 </div>
               )}
             </div>
           </div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+          <div className="muted panelSubtitle">
             Cumulative {method === 'realized' ? 'Realized PnL' : 'Total PnL (inc. unrealized)'} over time.
           </div>
           {!earningsChart || !earningsChart.labels.length ? (
-            <div className="muted" style={{ marginTop: 16 }}>No earnings data for this period.</div>
+            <div className="muted mt16">No earnings data for this period.</div>
           ) : (
-            <div className="chartWrapper" style={{ marginTop: 16, height: 280 }}>
+            <div className="chartWrapper chartWrapperWide">
               <Line
                 data={{
                   labels: earningsChart.labels,
@@ -392,19 +385,18 @@ export function PortfolioPage() {
         </div>
       </div>
 
-
       {metrics.mismatch && method === 'realized' ? (
-        <div className="error" style={{ marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+        <div className="error mismatchError">
           Pie total {formatCurrency(metrics.realizedFromLedger)} ≠ realized portfolio value {formatCurrency(metrics.realizedFromPnL)}. Check fund positions.
         </div>
       ) : null}
 
-      <div className="card panel" style={{ marginTop: 12 }}>
+      <div className="card panel mt12">
         <div className="panelTitle">Positions by symbol</div>
-        <div className="muted" style={{ marginTop: 6 }}>
+        <div className="muted mt8">
           Reference price per row is your <strong>average open cost</strong> (buying price from trades). Open cost basis is quantity × that average plus entry fees already rolled in.
         </div>
-        <div className="tableWrap" style={{ marginTop: 10 }}>
+        <div className="tableWrap positionsTable">
           <table className="table">
             <thead>
               <tr>
@@ -412,7 +404,7 @@ export function PortfolioPage() {
                 <th>Open Qty</th>
                 <th>Avg buying price</th>
                 <th>Open cost basis</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                <th className="textRight">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -422,12 +414,11 @@ export function PortfolioPage() {
                   <td className="mono">{h.open_quantity}</td>
                   <td className="mono">{h.avg_open_cost == null ? '—' : h.avg_open_cost.toFixed(4)}</td>
                   <td className="mono">{formatCurrency(h.open_cost_basis)}</td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td className="textRight">
                     {dividendSymbol === h.symbol ? (
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <div className="dividendInputRow">
                         <input
-                          className="miniInput"
-                          style={{ width: 80 }}
+                          className="miniInput dividendInput"
                           type="number"
                           placeholder="Amount"
                           value={dividendAmount}

@@ -2977,3 +2977,102 @@ textarea:focus {
   margin-right: 6px;
   vertical-align: middle;
 }
+
+/* ─── Portfolio Page ───────────────────────────────────── */
+.panelSubtitle {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.chartWrapperCentered {
+  max-width: 380px;
+  margin: 16px auto 0;
+  height: 280px;
+}
+
+.chartWrapperWide {
+  margin-top: 16px;
+  height: 280px;
+}
+
+.chartDoughnut {
+  position: relative;
+  height: 240px;
+  margin-top: 16px;
+}
+
+.earningsLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.earningsLegendRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.earningsLegendLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.earningsLegendDot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.periodSelector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.periodBtn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.periodDateRow {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.periodDateInput {
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
+.fullPanel {
+  grid-column: 1 / -1;
+}
+
+.mismatchError {
+  margin-top: 12px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.positionsTable {
+  margin-top: 10px;
+}
+
+.dividendInputRow {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.dividendInput {
+  width: 80px;
+}
+
+.textRight { text-align: right; }
