@@ -24,6 +24,7 @@ from .routes import (
     cash,
     health_accounts,
     lessons,
+    market_data,
     overview,
     portfolio,
     psychology,
@@ -40,7 +41,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from .db import engine as _engine
+    from datetime import datetime, UTC
+    from sqlalchemy import select
+
+    from .db import engine as _engine, session_scope
+    from .models import EodSchedule
+    from .market_data.service import get_service
+
     Base.metadata.create_all(bind=_engine)
     obsolete_tables = [
         "stock_raw_data",
@@ -62,7 +69,52 @@ async def lifespan(app: FastAPI):
                     logger.info("Dropped obsolete table: %s", tbl)
     except Exception as e:
         logger.debug("Table cleanup skipped: %s", e)
-    yield
+
+    try:
+        svc = get_service()
+        svc.ensure_symbols_seeded()
+    except Exception as e:  # pragma: no cover - defensive
+        logger.exception("Failed to seed symbols catalog: %s", e)
+
+    try:
+        with session_scope() as s:
+            existing = s.execute(select(EodSchedule).where(EodSchedule.market_code == "EGX")).scalar_one_or_none()
+            if existing is None:
+                s.add(
+                    EodSchedule(
+                        market_code="EGX",
+                        market_name="Egyptian Exchange",
+                        eod_hour=14,
+                        eod_minute=35,
+                        timezone="Africa/Cairo",
+                        is_active=True,
+                        created_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                logger.info("Seeded default EGX EOD schedule (14:35 Africa/Cairo)")
+    except Exception as e:  # pragma: no cover - defensive
+        logger.exception("Failed to seed EodSchedule: %s", e)
+
+    scheduler = None
+    try:
+        from .market_data.scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        scheduler.start()
+        try:
+            svc = get_service()
+            svc.refresh(canons=None)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.debug("Initial refresh skipped: %s", e)
+    except Exception as e:  # pragma: no cover - defensive
+        logger.exception("Failed to start market data scheduler: %s", e)
+
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Trading Journal API", version="0.1.0", lifespan=lifespan)
@@ -100,3 +152,4 @@ app.include_router(lessons.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
 app.include_router(settings.router)
+app.include_router(market_data.router)

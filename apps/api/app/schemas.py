@@ -341,3 +341,98 @@ class DividendRequest(BaseModel):
 class CashBalanceResponse(BaseModel):
     balance: float
 
+
+# ---------------------------------------------------------------------------
+# Market Data (Phase 6)
+# ---------------------------------------------------------------------------
+
+
+class SymbolRead(BaseModel):
+    id: int
+    canonical: str
+    name_en: str
+    name_ar: str | None = None
+    sector: str | None = None
+    exchange: str
+    currency: str
+    country: str
+    is_active: bool
+    last_loaded_at: datetime | None = None
+    last_price: float | None = None
+    last_price_at: datetime | None = None
+
+
+class QuoteRead(BaseModel):
+    symbol: str
+    price: float
+    currency: str
+    provider: str
+    fetched_at: datetime
+    previous_close: float | None = None
+    day_high: float | None = None
+    day_low: float | None = None
+    day_change: float | None = None
+    day_change_pct: float | None = None
+    year_high: float | None = None
+    year_low: float | None = None
+    volume: int | None = None
+    market_state: str | None = None
+    is_market_open: bool | None = None
+
+
+class QuotesRead(BaseModel):
+    quotes: list[QuoteRead]
+
+
+class PricePointRead(BaseModel):
+    at: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+
+
+class PriceHistoryRead(BaseModel):
+    symbol: str
+    points: list[PricePointRead]
+
+
+class MarketStatusRead(BaseModel):
+    is_market_open: bool
+    session_label: str
+    next_open_at: datetime | None = None
+    next_close_at: datetime | None = None
+    last_refresh_at: datetime | None = None
+    symbols_in_db: int
+    provider: str
+    note: str | None = None
+
+
+class RefreshResultRead(BaseModel):
+    requested: list[str]
+    success: list[str]
+    errors: dict[str, str]
+    started_at: datetime
+    finished_at: datetime | None = None
+    ok_count: int
+    fail_count: int
+
+
+class EodScheduleRead(BaseModel):
+    id: int
+    market_code: str
+    market_name: str
+    eod_hour: int
+    eod_minute: int
+    timezone: str
+    is_active: bool
+    updated_at: datetime
+
+
+class EodScheduleUpdate(BaseModel):
+    eod_hour: int | None = Field(default=None, ge=0, le=23)
+    eod_minute: int | None = Field(default=None, ge=0, le=59)
+    timezone: str | None = Field(default=None, max_length=64)
+    is_active: bool | None = None
+

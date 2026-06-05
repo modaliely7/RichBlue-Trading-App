@@ -63,6 +63,16 @@ hidden_imports = [
     "app.analytics",
     "app.portfolio_math",
     "app.symbol_lookup",
+    "app.report_builders",
+    # Market data (Phase 6)
+    "app.market_data",
+    "app.market_data.egx_stocks",
+    "app.market_data.models",
+    "app.market_data.cache",
+    "app.market_data.service",
+    "app.market_data.scheduler",
+    "app.market_data.providers",
+    "app.market_data.providers.yahoo",
     # Routers (S1 split)
     "app.routes",
     "app.routes.health_accounts",
@@ -78,6 +88,7 @@ hidden_imports = [
     "app.routes.analytics",
     "app.routes.reports",
     "app.routes.settings",
+    "app.routes.market_data",
 ]
 
 # ── Data files to bundle alongside the exe ────────────────────────────────────

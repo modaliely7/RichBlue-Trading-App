@@ -138,10 +138,12 @@ class Asset(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+    last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class PriceHistory(Base):
     __tablename__ = "price_history"
+    __table_args__ = (UniqueConstraint("symbol", "at", name="uq_price_history_symbol_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(32), index=True)
@@ -152,6 +154,39 @@ class PriceHistory(Base):
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class Symbol(Base):
+    __tablename__ = "symbols"
+    __table_args__ = (UniqueConstraint("canonical", name="uq_symbols_canonical"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    canonical: Mapped[str] = mapped_column(String(32), index=True)
+    name_en: Mapped[str] = mapped_column(String(256))
+    name_ar: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    exchange: Mapped[str] = mapped_column(String(16), default="EGX", index=True)
+    currency: Mapped[str] = mapped_column(String(8), default="EGP")
+    country: Mapped[str] = mapped_column(String(8), default="EG")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    last_loaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_price_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
+class EodSchedule(Base):
+    __tablename__ = "eod_schedules"
+    __table_args__ = (UniqueConstraint("market_code", name="uq_eod_schedules_market_code"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_code: Mapped[str] = mapped_column(String(16), index=True)
+    market_name: Mapped[str] = mapped_column(String(64))
+    eod_hour: Mapped[int] = mapped_column(Integer, default=14)
+    eod_minute: Mapped[int] = mapped_column(Integer, default=35)
+    timezone: Mapped[str] = mapped_column(String(64), default="Africa/Cairo")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class LessonCategory(str, enum.Enum):

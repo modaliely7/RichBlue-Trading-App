@@ -194,6 +194,24 @@ def _compute_holdings(s, account_id: int = 1, trades: Sequence[Trade] | None = N
     assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
     price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets if (a.symbol or "").strip()}
 
+    # Fallback: when an Asset row is missing, try the latest PriceHistory point.
+    # This lets the holdings view stay live for EGX symbols even when the user
+    # has no manually-edited Asset row.
+    if trades:
+        from .models import PriceHistory
+        candidates = sorted({(t.symbol or "").strip().upper() for t in trades if (t.symbol or "").strip()})
+        for sym in candidates:
+            if sym in price_by_symbol and price_by_symbol[sym] > 0:
+                continue
+            row = s.execute(
+                select(PriceHistory)
+                .where(PriceHistory.symbol == sym)
+                .order_by(PriceHistory.at.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            if row is not None and (row.close or 0.0) > 0:
+                price_by_symbol[sym] = float(row.close)
+
     by_symbol: dict[str, dict] = {}
     for t in trades:
         sym = (t.symbol or "").strip().upper()

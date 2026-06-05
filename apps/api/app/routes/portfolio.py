@@ -1,11 +1,13 @@
 """Portfolio summary and holdings router."""
 from __future__ import annotations
 
-from fastapi import APIRouter
+from datetime import datetime, UTC
+
+from fastapi import APIRouter, BackgroundTasks
 
 from ..db import session_scope
 from ..models import Asset, AssetClass
-from ..schemas import HoldingRow, PortfolioSummary
+from ..schemas import HoldingRow, PortfolioSummary, RefreshResultRead
 from ..utils import _compute_holdings
 from sqlalchemy import select
 
@@ -34,3 +36,39 @@ def portfolio_holdings(account_id: int = 1) -> list[HoldingRow]:
     """
     with session_scope() as s:
         return _compute_holdings(s, account_id)
+
+
+def _run_portfolio_refresh() -> None:
+    try:
+        from ..market_data.service import get_service
+
+        get_service().refresh(canons=None)
+    except Exception:
+        pass
+
+
+@router.post("/portfolio/refresh-prices", response_model=RefreshResultRead)
+def portfolio_refresh_prices(bg: BackgroundTasks, account_id: int = 1) -> RefreshResultRead:
+    """Force a background refresh of every EGX symbol held in this account's open positions.
+
+    The PortfolioPage wires this to its "Refresh prices" button.
+    """
+    bg.add_task(_run_portfolio_refresh)
+    from ..market_data.service import get_service
+    from ..egx_stocks import get_canonical
+
+    with session_scope() as s:
+        from ..models import Trade
+
+        rows = s.execute(
+            select(Trade.symbol).where(Trade.account_id == account_id).distinct()
+        ).all()
+    targets = [get_canonical(r[0]) for r in rows if (r[0] or "").strip()]
+    return RefreshResultRead(
+        requested=targets,
+        success=[],
+        errors={},
+        started_at=datetime.now(UTC),
+        ok_count=0,
+        fail_count=0,
+    )
