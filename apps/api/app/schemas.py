@@ -111,6 +111,16 @@ class TradeUpdate(BaseModel):
     playbook_setup_id: int | None = None
 
 
+class TradeClose(BaseModel):
+    exit_price: float
+    exit_date: datetime
+    process_grade: int = Field(ge=1, le=5)
+    r_multiple_grade: int = Field(ge=1, le=5)
+    exit_fees: float = 0.0
+    lessons_learned: str | None = None
+    notes: str | None = None
+
+
 class TradeRead(TradeBase):
     id: int
     screenshot_path: str | None = None

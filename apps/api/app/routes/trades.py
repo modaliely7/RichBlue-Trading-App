@@ -24,7 +24,7 @@ from sqlalchemy.orm import selectinload
 
 from ..db import session_scope
 from ..models import Asset, AssetClass, CashTransaction, CashTxType, Strategy, Trade
-from ..schemas import DividendRequest, TradeCreate, TradeRead, TradeUpdate
+from ..schemas import DividendRequest, TradeClose, TradeCreate, TradeRead, TradeUpdate
 from ..utils import (
     _add_cash_tx,
     _cash_balance,
@@ -126,6 +126,11 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
         t = s.get(Trade, trade_id)
         if not t:
             raise HTTPException(status_code=404, detail="Trade not found")
+        if t.exit_price is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Trade is closed and immutable. Closed trades cannot be edited.",
+            )
 
         data = payload.model_dump(exclude_unset=True)
         strategy_ids = data.pop("strategy_ids", None)
@@ -200,10 +205,64 @@ def delete_trade(trade_id: int) -> dict:
         t = s.get(Trade, trade_id)
         if not t:
             raise HTTPException(status_code=404, detail="Trade not found")
+        if t.exit_price is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Trade is closed and immutable. Closed trades cannot be deleted.",
+            )
         s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
         s.delete(t)
         s.flush()
         return {"deleted": True}
+
+
+@router.post("/trades/{trade_id}/close", response_model=TradeRead)
+def close_trade(trade_id: int, payload: TradeClose) -> TradeRead:
+    with session_scope() as s:
+        t = s.get(Trade, trade_id)
+        if not t:
+            raise HTTPException(status_code=404, detail="Trade not found")
+        if t.exit_price is not None:
+            raise HTTPException(status_code=409, detail="Trade is already closed.")
+
+        account_id = t.account_id
+        s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
+        s.flush()
+
+        t.exit_price = payload.exit_price
+        t.exit_date = payload.exit_date
+        t.exit_fees = payload.exit_fees
+        t.process_grade = payload.process_grade
+        t.r_multiple_grade = payload.r_multiple_grade
+        t.lessons_learned = payload.lessons_learned
+        t.notes = payload.notes if payload.notes is not None else t.notes
+
+        s.add(t)
+        s.flush()
+        s.refresh(t)
+
+        if t.position_size and t.exit_price is not None:
+            _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=float(t.exit_price) * float(t.position_size or 0.0),
+                tx_type=CashTxType.trade_sell,
+                at=t.exit_date or datetime.now(UTC),
+                note="Trade exit (sell)",
+                trade=t,
+            )
+        if t.exit_fees and float(t.exit_fees) > 0.0:
+            _add_cash_tx(
+                s,
+                account_id=account_id,
+                amount=-float(t.exit_fees),
+                tx_type=CashTxType.fee,
+                at=t.exit_date or datetime.now(UTC),
+                note="Trade exit (fees)",
+                trade=t,
+            )
+
+        return to_trade_read(t)
 
 
 # ---------------------------------------------------------------------------
