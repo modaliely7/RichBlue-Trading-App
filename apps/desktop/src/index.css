@@ -2638,3 +2638,147 @@ textarea:focus {
 .tabSection {
   animation: slideIn 0.3s ease;
 }
+
+/* ─── Calculators Page ─────────────────────────────────── */
+.calcLayout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+}
+
+.calcPanelsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.calcPanelsGrid .panel.fullRow {
+  grid-column: 1 / -1;
+}
+
+.calcPanelGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.calcResults {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--panel2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.calcResultRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.calcResultRow:last-child {
+  margin-bottom: 0;
+}
+
+.calcMetrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.calcMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calcMetricLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted2);
+}
+
+.calcMetricValue {
+  font-family: var(--mono, monospace);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.calcMetricValue.success { color: var(--accent2); }
+.calcMetricValue.danger { color: var(--danger); }
+.calcMetricValue.accent { color: var(--accent); }
+
+.allocationHero {
+  text-align: center;
+  padding: 10px 0 20px;
+}
+
+.allocationHeroValue {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.1;
+}
+
+.allocationHeroLabel {
+  color: var(--muted2);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.allocationTable {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.calcTip {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.advancedToolBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.advancedToolBlock .label {
+  margin-bottom: 0;
+}
+
+.advancedToolBlock .muted {
+  font-size: 12px;
+}
+
+.advancedToolBlock .mutedTiny {
+  font-size: 10px;
+}
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recentItemTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.recentItemMeta {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.modalActions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

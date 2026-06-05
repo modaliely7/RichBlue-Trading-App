@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { api } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
+import { PageHeader, Button, Modal } from '../components/ui'
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n))
@@ -16,14 +18,12 @@ export function CalculatorsPage() {
     queryFn: () => api.overview(currentAccount?.id ?? 1)
   })
 
-  // Position Size Calculator State
   const [account, setAccount] = useState(10_000)
   const [riskPct, setRiskPct] = useState(1)
   const [entry, setEntry] = useState(100)
   const [stop, setStop] = useState(98)
   const [target, setTarget] = useState(105)
 
-  // Simulation Modal
   const [isSimulating, setIsSimulating] = useState(false)
   const [simName, setSimName] = useState('New Simulation')
 
@@ -44,20 +44,19 @@ export function CalculatorsPage() {
 
   return (
     <div className="page">
-      <div className="pageHeader">
-        <div>
-          <div className="pageTitle">Trading Calculators</div>
-          <div className="pageSubtitle">Plan your risk, simulate scenarios, and monitor allocations.</div>
-        </div>
-        <div className="detailsActions">
-          <button className="btn" onClick={() => setIsSimulating(true)}>+ Simulate Trade</button>
-        </div>
-      </div>
+      <PageHeader
+        title="Trading Calculators"
+        subtitle="Plan your risk, simulate scenarios, and monitor allocations."
+        actions={
+          <Button leftIcon={<Plus size={16} />} onClick={() => setIsSimulating(true)}>
+            Simulate Trade
+          </Button>
+        }
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20 }}>
+      <div className="calcLayout">
         <div className="mainCol">
-          <div className="grid panels" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))' }}>
-            {/* Sizing Calculator */}
+          <div className="calcPanelsGrid">
             <div className="card panel">
               <div className="panelTitle">Advanced Position Sizer</div>
               <div className="formGrid">
@@ -83,47 +82,46 @@ export function CalculatorsPage() {
                 </label>
               </div>
 
-              <div style={{ marginTop: 24, padding: 20, background: 'var(--panel2)', borderRadius: 12, border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="calcResults">
+                <div className="calcResultRow">
                   <span className="muted">Position Size:</span>
-                  <span className="good strong mono">
+                  <span className="calcMetricValue success strong">
                     {Number.isFinite(calc.positionSize) ? calc.positionSize.toFixed(2) : '—'} units
                   </span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div>
-                    <div className="label" style={{ fontSize: 10 }}>Risk Amount</div>
-                    <div className="mono" style={{ fontSize: 16 }}>{formatCurrency(calc.riskAmount)}</div>
+                <div className="calcMetrics">
+                  <div className="calcMetric">
+                    <span className="calcMetricLabel">Risk Amount</span>
+                    <span className="calcMetricValue">{formatCurrency(calc.riskAmount)}</span>
                   </div>
-                  <div>
-                    <div className="label" style={{ fontSize: 10 }}>Potential Reward</div>
-                    <div className="mono good" style={{ fontSize: 16 }}>
+                  <div className="calcMetric">
+                    <span className="calcMetricLabel">Potential Reward</span>
+                    <span className="calcMetricValue success">
                       {Number.isFinite(calc.positionSize) ? formatCurrency(calc.reward * calc.positionSize) : '—'}
-                    </div>
+                    </span>
                   </div>
-                  <div>
-                    <div className="label" style={{ fontSize: 10 }}>Risk/Reward Ratio</div>
-                    <div className="mono accent" style={{ fontSize: 16 }}>
+                  <div className="calcMetric">
+                    <span className="calcMetricLabel">Risk/Reward Ratio</span>
+                    <span className="calcMetricValue accent">
                       {Number.isFinite(calc.rr) ? calc.rr.toFixed(2) : '—'}R
-                    </div>
+                    </span>
                   </div>
-                  <div>
-                    <div className="label" style={{ fontSize: 10 }}>Notional Value</div>
-                    <div className="mono" style={{ fontSize: 16 }}>{formatCurrency(calc.notional)}</div>
+                  <div className="calcMetric">
+                    <span className="calcMetricLabel">Notional Value</span>
+                    <span className="calcMetricValue">{formatCurrency(calc.notional)}</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Allocation Insight */}
             <div className="card panel">
               <div className="panelTitle">Portfolio Allocation</div>
-              <div style={{ textAlign: 'center', padding: '10px 0 20px' }}>
-                <div className="accent" style={{ fontSize: 32, fontWeight: 800 }}>{allocationPct.toFixed(1)}%</div>
-                <div className="muted">of portfolio currently allocated</div>
+              <div className="allocationHero">
+                <div className="allocationHeroValue">{allocationPct.toFixed(1)}%</div>
+                <div className="allocationHeroLabel">of portfolio currently allocated</div>
               </div>
-              
-              <div className="tableWrap" style={{ maxHeight: 200, overflowY: 'auto' }}>
+
+              <div className="tableWrap allocationTable">
                 <table className="table">
                   <thead>
                     <tr>
@@ -149,37 +147,40 @@ export function CalculatorsPage() {
                         </tr>
                       )
                     })}
-                    {openHoldings.length === 0 && <tr><td colSpan={4} className="muted">No open positions.</td></tr>}
+                    {openHoldings.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="muted">No open positions.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
-              <div className="muted" style={{ marginTop: 10, fontSize: 11 }}>Tip: Click a position to load its price into the calculator.</div>
+              <div className="muted calcTip">Tip: Click a position to load its price into the calculator.</div>
             </div>
 
-            {/* Advanced Tools */}
-            <div className="card panel" style={{ gridColumn: 'span 2' }}>
+            <div className="card panel fullRow">
               <div className="panelTitle">Advanced Strategy Tools</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <div>
-                  <div className="label" style={{ marginBottom: 12 }}>Kelly Criterion</div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Suggests optimal risk % based on win rate and RR.</div>
+              <div className="calcPanelGrid">
+                <div className="advancedToolBlock">
+                  <div className="label">Kelly Criterion</div>
+                  <div className="muted">Suggests optimal risk % based on win rate and RR.</div>
                   <div className="card panel">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div className="calcResultRow">
                       <span className="muted">Optimal Risk:</span>
-                      <span className="good strong mono">2.45%</span>
+                      <span className="calcMetricValue success strong">2.45%</span>
                     </div>
-                    <div className="muted" style={{ fontSize: 10 }}>Based on 55% Win Rate & 2.0 RR</div>
+                    <div className="muted mutedTiny">Based on 55% Win Rate & 2.0 RR</div>
                   </div>
                 </div>
-                <div>
-                  <div className="label" style={{ marginBottom: 12 }}>Risk of Ruin</div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Probability of losing entire capital.</div>
+                <div className="advancedToolBlock">
+                  <div className="label">Risk of Ruin</div>
+                  <div className="muted">Probability of losing entire capital.</div>
                   <div className="card panel">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div className="calcResultRow">
                       <span className="muted">Probability:</span>
-                      <span className="bad strong mono">0.02%</span>
+                      <span className="calcMetricValue danger strong">0.02%</span>
                     </div>
-                    <div className="muted" style={{ fontSize: 10 }}>Based on current win rate & sizing</div>
+                    <div className="muted mutedTiny">Based on current win rate & sizing</div>
                   </div>
                 </div>
               </div>
@@ -189,47 +190,46 @@ export function CalculatorsPage() {
 
         <div className="sideCol">
           <div className="sectionTitle">Recent Calculations</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="recentList">
             <div className="card panel">
-              <div style={{ fontSize: 12, fontWeight: 600 }}>AAPL Breakout Plan</div>
-              <div className="muted" style={{ fontSize: 11 }}>Risk: $100 | Size: 12 shares</div>
+              <div className="recentItemTitle">AAPL Breakout Plan</div>
+              <div className="muted recentItemMeta">Risk: $100 | Size: 12 shares</div>
             </div>
             <div className="card panel">
-              <div style={{ fontSize: 12, fontWeight: 600 }}>TSLA Mean Reversion</div>
-              <div className="muted" style={{ fontSize: 11 }}>Risk: $200 | Size: 4 shares</div>
+              <div className="recentItemTitle">TSLA Mean Reversion</div>
+              <div className="muted recentItemMeta">Risk: $200 | Size: 4 shares</div>
             </div>
           </div>
         </div>
       </div>
 
-      {isSimulating && (
-        <div className="modalOverlay" onClick={() => setIsSimulating(false)}>
-          <div className="modal card panel" onClick={e => e.stopPropagation()} style={{ width: 500 }}>
-            <div className="panelTitle">Simulate Trade Scenario</div>
-            <div className="muted" style={{ marginBottom: 20 }}>Project outcomes without risking real capital.</div>
-            
-            <div className="formGrid">
-              <label className="span4">
-                <div className="label">Scenario Name</div>
-                <input type="text" value={simName} onChange={e => setSimName(e.target.value)} />
-              </label>
-              <label className="span2">
-                <div className="label">Entry</div>
-                <input type="number" defaultValue={100} />
-              </label>
-              <label className="span2">
-                <div className="label">Target</div>
-                <input type="number" defaultValue={120} />
-              </label>
-            </div>
-
-            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button className="btn btnGhost" onClick={() => setIsSimulating(false)}>Cancel</button>
-              <button className="btn" onClick={() => setIsSimulating(false)}>Run Simulation</button>
-            </div>
-          </div>
+      <Modal
+        open={isSimulating}
+        onClose={() => setIsSimulating(false)}
+        title="Simulate Trade Scenario"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setIsSimulating(false)}>Cancel</Button>
+            <Button onClick={() => setIsSimulating(false)}>Run Simulation</Button>
+          </>
+        }
+      >
+        <p className="muted mb16">Project outcomes without risking real capital.</p>
+        <div className="formGrid">
+          <label className="span4">
+            <div className="label">Scenario Name</div>
+            <input type="text" value={simName} onChange={e => setSimName(e.target.value)} />
+          </label>
+          <label className="span2">
+            <div className="label">Entry</div>
+            <input type="number" defaultValue={100} />
+          </label>
+          <label className="span2">
+            <div className="label">Target</div>
+            <input type="number" defaultValue={120} />
+          </label>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }
