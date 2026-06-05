@@ -274,6 +274,56 @@ export type Playbook = {
 export type PlaybookCreate = Omit<Playbook, 'id' | 'account_id' | 'created_at' | 'updated_at' | 'setup_count' | 'setups'>
 export type PlaybookUpdate = Partial<Omit<Playbook, 'id' | 'account_id' | 'created_at' | 'updated_at' | 'setup_count' | 'setups'>>
 
+export type InsightsResponse = {
+  summary: { trade_count: number; closed_count: number }
+  emotions: {
+    emotion: string
+    trade_count: number
+    win_rate: number | null
+    avg_r_multiple: number | null
+    total_pnl: number
+  }[]
+  playbooks: {
+    playbook_id: number | null
+    playbook_name: string
+    trade_count: number
+    win_rate: number | null
+    avg_r_multiple: number | null
+    avg_process_grade: number | null
+    setup_names: string[]
+  }[]
+  setups: {
+    playbook_id: number | null
+    playbook_name: string | null
+    setup_id: number | null
+    setup_name: string
+    trade_count: number
+    win_rate: number | null
+    avg_r_multiple: number | null
+  }[]
+  plan_accuracy: {
+    trade_count: number
+    avg_plan: number | null
+    avg_actual: number | null
+    drift: number | null
+    pct_meeting_plan: number | null
+  } | null
+  process_grades: {
+    grade: number
+    trade_count: number
+    avg_r_multiple: number | null
+    win_rate: number | null
+  }[]
+  insights: {
+    severity: 'warning' | 'good' | 'info'
+    category: string
+    title: string
+    body: string
+    metric: number | null
+    sample_size: number | null
+  }[]
+}
+
 export type LessonCategory = 'Mistake' | 'Lesson' | 'Psychological note' | 'Strategy insight'
 
 export type Lesson = {
@@ -597,6 +647,8 @@ export const api = {
     apiFetch<PlaybookSetup>(`/playbooks/${playbookId}/setups/${setupId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deletePlaybookSetup: (playbookId: number, setupId: number) =>
     apiFetch<{ deleted: true }>(`/playbooks/${playbookId}/setups/${setupId}`, { method: 'DELETE' }),
+
+  getInsights: (accountId: number = 1) => apiFetch<InsightsResponse>(`/insights?account_id=${accountId}`),
 
   // Market data (Phase 6)
   listEgxSymbols: (query?: string, limit: number = 50) => {

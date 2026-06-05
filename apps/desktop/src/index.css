@@ -740,6 +740,24 @@ textarea:focus {
   color: var(--amber, #f59e0b);
 }
 
+.insightRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel2);
+}
+.insightRow[data-severity="warning"] {
+  border-color: var(--bad, #f43f5e);
+  background: color-mix(in srgb, var(--bad, #f43f5e) 6%, var(--panel2));
+}
+.insightRow[data-severity="good"] {
+  border-color: var(--good, #10b981);
+  background: color-mix(in srgb, var(--good, #10b981) 6%, var(--panel2));
+}
+
 /* ─── Risk Banner ──────────────────────────────────────── */
 
 /* ─── Risk Banner ──────────────────────────────────────── */
