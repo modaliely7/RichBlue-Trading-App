@@ -8,3 +8,5 @@ __pycache__
 *.pyc
 .venv
 *.spec.bak
+scripts/.app.pid
+scripts/.app.log
