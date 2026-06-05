@@ -3227,3 +3227,308 @@ textarea:focus {
   display: block;
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
+
+/* ─── Market Status Pill (Phase 6) ───────────────────────── */
+.marketStatusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid transparent;
+}
+.marketStatusPill .marketStatusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.marketStatusOpen {
+  background: rgba(5, 150, 105, 0.10);
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.30);
+}
+.marketStatusOpen .marketStatusDot {
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: marketPulse 1.6s infinite;
+}
+.marketStatusClosed {
+  background: rgba(225, 29, 72, 0.08);
+  color: #b91c1c;
+  border-color: rgba(225, 29, 72, 0.25);
+}
+.marketStatusClosed .marketStatusDot {
+  background: #e11d48;
+}
+.marketStatusLoading {
+  background: var(--accent-dim);
+  color: var(--muted2);
+}
+.marketStatusError {
+  background: rgba(217, 119, 6, 0.10);
+  color: #b45309;
+  border-color: rgba(217, 119, 6, 0.30);
+}
+@keyframes marketPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0.55); }
+  70%  { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(16, 185, 129, 0); }
+}
+
+/* ─── Price Sparkline (Phase 6) ───────────────────────────── */
+.priceSparkline {
+  display: block;
+  background: transparent;
+}
+
+/* ─── Unrealized P&L cell (Phase 6) ───────────────────────── */
+.unrealizedPnlCell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.unrealizedPnlCell.good {
+  color: var(--success);
+}
+.unrealizedPnlCell.bad {
+  color: var(--danger);
+}
+.unrealizedPnlPct {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+/* ─── Last refresh indicator (Phase 6) ────────────────────── */
+.lastRefreshHint {
+  font-size: 11px;
+  color: var(--muted2);
+  margin-top: 4px;
+}
+
+/* ─── Symbol picker (Phase 6) ─────────────────────────────── */
+.symbolPicker {
+  position: relative;
+}
+.symbolPickerInput {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  pointer-events: auto;
+  user-select: text;
+}
+.symbolPickerInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.symbolPickerDropdown {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(4, 9, 20, 0.18);
+}
+.symbolPickerItem {
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.symbolPickerItem:last-child {
+  border-bottom: none;
+}
+.symbolPickerItem:hover,
+.symbolPickerItemFocused {
+  background: var(--panel-hover);
+}
+.symbolPickerItemSelected {
+  background: var(--accent-dim);
+}
+.symbolPickerItemTicker {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.symbolPickerItemName {
+  color: var(--muted2);
+  font-size: 12px;
+  flex: 1;
+  text-align: left;
+}
+.symbolPickerItemSector {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.symbolPickerEmpty {
+  padding: 12px;
+  color: var(--muted2);
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ─── Market Data settings tab (Phase 6) ─────────────────────── */
+.marketDataStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+.marketDataActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+@media (max-width: 720px) {
+  .marketDataStatus {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ─── Reports page (Phase 6) ────────────────────────────────── */
+.reportsPeriodBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.reportsPeriodLabel {
+  font-size: 13px;
+  color: var(--muted);
+}
+.reportsPeriodFields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.reportsPeriodFields input[type="date"] {
+  width: 160px;
+}
+.reportsPeriodClear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.reportsPeriodClear:hover {
+  color: var(--text-strong);
+  border-color: var(--accent);
+}
+.reportsBanner {
+  margin-bottom: 16px;
+}
+.reportsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.reportsCard {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reportsCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reportsCardIcon {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 10px;
+}
+.reportsCardTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.reportsCardDesc {
+  color: var(--muted2);
+  font-size: 13px;
+  line-height: 1.45;
+  flex: 1;
+  margin: 0;
+}
+.reportsCardActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.reportsDownload {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: white;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.reportsDownload:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.reportsDownload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.reportsDownload.ghost {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.reportsDownload.ghost:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+

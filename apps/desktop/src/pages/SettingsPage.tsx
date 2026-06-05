@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
-import { User, Target, Database, Palette, Maximize2, Plus, Check } from 'lucide-react'
+import { User, Target, Database, Palette, Maximize2, Plus, Check, LineChart, RefreshCw } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAccount } from '../components/AccountContext'
-import { type Account, type Strategy } from '../lib/api'
+import { type Account, type Strategy, type EodSchedule } from '../lib/api'
+import { MarketStatusPill } from '../components/MarketStatusPill'
 import { PageHeader } from '../components/ui'
 import { Button } from '../components/ui'
 
@@ -18,12 +19,13 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-type TabId = 'accounts' | 'strategies' | 'data' | 'appearance' | 'display'
+type TabId = 'accounts' | 'strategies' | 'data' | 'appearance' | 'display' | 'market-data'
 
 const TABS: { id: TabId; label: string; desc: string; Icon: typeof User }[] = [
   { id: 'accounts', label: 'Accounts', desc: 'Manage your profiles', Icon: User },
   { id: 'strategies', label: 'Strategies', desc: 'Define your edge', Icon: Target },
   { id: 'data', label: 'Data', desc: 'Backup & Restore', Icon: Database },
+  { id: 'market-data', label: 'Market Data', desc: 'Schedule & refresh', Icon: LineChart },
   { id: 'appearance', label: 'Theme', desc: 'Colors & Icons', Icon: Palette },
   { id: 'display', label: 'Display', desc: 'Font & Zoom', Icon: Maximize2 },
 ]
@@ -147,6 +149,46 @@ export function SettingsPage() {
   const deleteAccountMutation = useMutation({
     mutationFn: (id: number) => apiFetch<{ deleted: boolean }>(`/accounts/${id}`, { method: 'DELETE' }),
     onSuccess: () => refreshAccounts()
+  })
+
+  // Market Data
+  const { data: schedules = [], refetch: refetchSchedules } = useQuery<EodSchedule[]>({
+    queryKey: ['eod-schedules'],
+    queryFn: () => api.getEodSchedule()
+  })
+  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null)
+  const [editScheduleHour, setEditScheduleHour] = useState<string>('14')
+  const [editScheduleMinute, setEditScheduleMinute] = useState<string>('35')
+  const [editScheduleTz, setEditScheduleTz] = useState<string>('Africa/Cairo')
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: (payload: { id: number; eod_hour: number; eod_minute: number; timezone: string }) =>
+      api.updateEodSchedule(payload.id, { eod_hour: payload.eod_hour, eod_minute: payload.eod_minute, timezone: payload.timezone }),
+    onSuccess: async () => {
+      await refetchSchedules()
+      setEditingScheduleId(null)
+      setError('')
+      setMessage('Schedule updated. Rescheduling live.')
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : 'Update failed'),
+  })
+
+  const refreshMutation = useMutation({
+    mutationFn: () => api.refreshMarketDataNow(),
+    onSuccess: (res) => {
+      setError('')
+      setMessage(`Refresh done — ${res.ok_count} updated, ${res.fail_count} failed.`)
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : 'Refresh failed'),
+  })
+
+  const refreshSymbolsMutation = useMutation({
+    mutationFn: () => api.refreshSymbolsCatalog(),
+    onSuccess: (res) => {
+      setError('')
+      setMessage(`Catalog re-seeded — ${res.touched} rows touched.`)
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : 'Catalog refresh failed'),
   })
 
   return (
@@ -389,6 +431,147 @@ export function SettingsPage() {
                     {clearMutation.isPending ? 'Clearing...' : 'Wipe All Data'}
                   </Button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'market-data' && (
+            <div className="tabSection">
+              <div className="sectionHeader">
+                <h2>Market Data</h2>
+                <p className="muted">Auto-refresh schedule and on-demand price updates for EGX.</p>
+              </div>
+
+              <div className="marketDataStatus">
+                <div>
+                  <div className="label">EGX Status</div>
+                  <MarketStatusPill />
+                </div>
+                <div className="marketDataActions">
+                  <Button
+                    onClick={() => refreshMutation.mutate()}
+                    loading={refreshMutation.isPending}
+                    disabled={refreshMutation.isPending}
+                  >
+                    <RefreshCw size={16} /> {refreshMutation.isPending ? 'Refreshing…' : 'Refresh now'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => refreshSymbolsMutation.mutate()}
+                    loading={refreshSymbolsMutation.isPending}
+                    disabled={refreshSymbolsMutation.isPending}
+                  >
+                    {refreshSymbolsMutation.isPending ? 'Re-seeding…' : 'Re-seed EGX catalog'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="sectionHeader" style={{ marginTop: 32 }}>
+                <h3>End-of-Day Schedules</h3>
+                <p className="muted">Configure when the scheduler pulls closing prices per market.</p>
+              </div>
+
+              <div className="tableWrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Market</th>
+                      <th>Time</th>
+                      <th>Timezone</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedules.map(s => (
+                      <tr key={s.id}>
+                        {editingScheduleId === s.id ? (
+                          <>
+                            <td style={{ fontWeight: 600 }}>{s.market_name}</td>
+                            <td>
+                              <div className="formRow">
+                                <input
+                                  className="input"
+                                  style={{ width: 70 }}
+                                  type="number"
+                                  min={0}
+                                  max={23}
+                                  value={editScheduleHour}
+                                  onChange={e => setEditScheduleHour(e.target.value)}
+                                />
+                                <span>:</span>
+                                <input
+                                  className="input"
+                                  style={{ width: 70 }}
+                                  type="number"
+                                  min={0}
+                                  max={59}
+                                  value={editScheduleMinute}
+                                  onChange={e => setEditScheduleMinute(e.target.value)}
+                                />
+                              </div>
+                            </td>
+                            <td>
+                              <input
+                                className="input"
+                                style={{ width: 160 }}
+                                value={editScheduleTz}
+                                onChange={e => setEditScheduleTz(e.target.value)}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <Button
+                                size="sm"
+                                onClick={() => updateScheduleMutation.mutate({
+                                  id: s.id,
+                                  eod_hour: Number(editScheduleHour),
+                                  eod_minute: Number(editScheduleMinute),
+                                  timezone: editScheduleTz,
+                                })}
+                                disabled={updateScheduleMutation.isPending}
+                              >
+                                Save
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingScheduleId(null)}>Cancel</Button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ fontWeight: 600 }}>{s.market_name} <span className="muted">({s.market_code})</span></td>
+                            <td>{String(s.eod_hour).padStart(2, '0')}:{String(s.eod_minute).padStart(2, '0')}</td>
+                            <td><code className="muted">{s.timezone}</code></td>
+                            <td style={{ textAlign: 'right' }}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingScheduleId(s.id)
+                                  setEditScheduleHour(String(s.eod_hour))
+                                  setEditScheduleMinute(String(s.eod_minute))
+                                  setEditScheduleTz(s.timezone)
+                                }}
+                              >
+                                Edit
+                              </Button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                    {schedules.length === 0 && (
+                      <tr className="emptyRow">
+                        <td colSpan={4}>No schedules configured. The API seeds a default EGX row on startup.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="tipBar">
+                <p>
+                  <b>How it works:</b> The scheduler auto-refreshes symbols at 10:01 (Cairo) and at the EOD time above.
+                  Cached for 15 min during market hours, 24 h otherwise. US/Crypto/Forex symbols stay manual — use
+                  the trade edit form to set <code>current_price</code> directly.
+                </p>
               </div>
             </div>
           )}

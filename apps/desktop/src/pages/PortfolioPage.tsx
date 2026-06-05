@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pie, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
+import { MarketStatusPill } from '../components/MarketStatusPill'
+import { PriceSparkline } from '../components/PriceSparkline'
+import { UnrealizedPnlCell } from '../components/UnrealizedPnlCell'
 import { api } from '../lib/api'
-import type { HoldingRow } from '../lib/api'
+import type { HoldingRow, PricePoint } from '../lib/api'
 import { formatCurrency, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 import '../lib/charts'
@@ -36,6 +39,8 @@ export function PortfolioPage() {
   const [dividendAmount, setDividendAmount] = useState<string>('')
   const [isSubmittingDiv, setIsSubmittingDiv] = useState(false)
 
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false)
+
   const addDividend = async () => {
     if (!dividendSymbol || !dividendAmount || isSubmittingDiv) return
     const amount = parseFloat(dividendAmount)
@@ -59,6 +64,20 @@ export function PortfolioPage() {
     }
   }
 
+  const handleRefreshPrices = async () => {
+    if (isRefreshingPrices) return
+    setIsRefreshingPrices(true)
+    try {
+      await api.portfolioRefreshPrices(currentAccount?.id ?? 1)
+      await qc.invalidateQueries({ queryKey: ['overview'] })
+      await qc.invalidateQueries({ queryKey: ['price-history'] })
+    } catch (e) {
+      alert('Failed to refresh prices')
+    } finally {
+      setIsRefreshingPrices(false)
+    }
+  }
+
   const holdings = useMemo(() => ov?.holdings ?? [], [ov])
   const openHoldings = useMemo(
     () =>
@@ -67,6 +86,31 @@ export function PortfolioPage() {
         .sort((a, b) => Number(b.open_cost_basis ?? 0) - Number(a.open_cost_basis ?? 0)),
     [holdings],
   )
+
+  const openSymbols = useMemo(
+    () => Array.from(new Set(openHoldings.map((h) => h.symbol))),
+    [openHoldings],
+  )
+
+  const { data: historyMap } = useQuery<Record<string, PricePoint[]>>({
+    queryKey: ['price-history', currentAccount?.id, openSymbols],
+    queryFn: async () => {
+      if (openSymbols.length === 0) return {}
+      const entries = await Promise.all(
+        openSymbols.map(async (sym) => {
+          try {
+            const r = await api.getPriceHistory(sym, 30)
+            return [sym, r.points] as const
+          } catch {
+            return [sym, []] as const
+          }
+        }),
+      )
+      return Object.fromEntries(entries)
+    },
+    enabled: openSymbols.length > 0,
+    staleTime: 5 * 60_000,
+  })
 
   const metrics = useMemo(() => {
     const cash = Number(ov?.kpis.cash_balance ?? 0)
@@ -161,6 +205,7 @@ export function PortfolioPage() {
           <div className="pageSubtitle">Cash plus the cost of what you own (from trades and fund positions)</div>
         </div>
         <div className="detailsActions">
+          <MarketStatusPill />
           <OverviewSyncBar />
           <select value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="realized">Realized view</option>
@@ -392,9 +437,23 @@ export function PortfolioPage() {
       ) : null}
 
       <div className="card panel mt12">
-        <div className="panelTitle">Positions by symbol</div>
-        <div className="muted mt8">
-          Reference price per row is your <strong>average open cost</strong> (buying price from trades). Open cost basis is quantity × that average plus entry fees already rolled in.
+        <div className="panelHeader">
+          <div>
+            <div className="panelTitle">Positions by symbol</div>
+            <div className="muted mt8">
+              Reference price per row is your <strong>average open cost</strong> (buying price from trades). Current price is auto-fetched for EGX symbols.
+            </div>
+          </div>
+          <div className="detailsActions">
+            <button
+              className="btn btnGhost"
+              onClick={handleRefreshPrices}
+              disabled={isRefreshingPrices || openSymbols.length === 0}
+              title="Refresh EGX prices now"
+            >
+              {isRefreshingPrices ? 'Refreshing…' : '↻ Refresh prices'}
+            </button>
+          </div>
         </div>
         <div className="tableWrap positionsTable">
           <table className="table">
@@ -403,47 +462,68 @@ export function PortfolioPage() {
                 <th>Symbol</th>
                 <th>Open Qty</th>
                 <th>Avg buying price</th>
+                <th>Current price</th>
+                <th>Trend (30d)</th>
                 <th>Open cost basis</th>
+                <th>Market value</th>
+                <th>Unrealized P/L</th>
                 <th className="textRight">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {openHoldings.map((h: HoldingRow) => (
-                <tr key={h.symbol}>
-                  <td className="mono">{h.symbol}</td>
-                  <td className="mono">{h.open_quantity}</td>
-                  <td className="mono">{h.avg_open_cost == null ? '—' : h.avg_open_cost.toFixed(4)}</td>
-                  <td className="mono">{formatCurrency(h.open_cost_basis)}</td>
-                  <td className="textRight">
-                    {dividendSymbol === h.symbol ? (
-                      <div className="dividendInputRow">
-                        <input
-                          className="miniInput dividendInput"
-                          type="number"
-                          placeholder="Amount"
-                          value={dividendAmount}
-                          onChange={(e) => setDividendAmount(e.target.value)}
-                          autoFocus
-                        />
-                        <button className="btn btnGhost" onClick={addDividend} disabled={isSubmittingDiv}>
-                          {isSubmittingDiv ? '...' : 'Add'}
+              {openHoldings.map((h: HoldingRow) => {
+                const hist = historyMap?.[h.symbol] ?? []
+                const closes = hist.map((p) => p.close)
+                const isUp = closes.length >= 2 ? closes[closes.length - 1] >= closes[0] : (h.unrealized_pnl ?? 0) >= 0
+                return (
+                  <tr key={h.symbol}>
+                    <td className="mono">{h.symbol}</td>
+                    <td className="mono">{h.open_quantity}</td>
+                    <td className="mono">{h.avg_open_cost == null ? '—' : h.avg_open_cost.toFixed(4)}</td>
+                    <td className="mono">
+                      {h.current_price != null ? h.current_price.toFixed(2) : '—'}
+                    </td>
+                    <td>
+                      {closes.length >= 2 ? <PriceSparkline values={closes} positive={isUp} /> : <span className="muted">—</span>}
+                    </td>
+                    <td className="mono">{formatCurrency(h.open_cost_basis)}</td>
+                    <td className="mono">
+                      {h.market_value != null ? formatCurrency(h.market_value) : '—'}
+                    </td>
+                    <td>
+                      <UnrealizedPnlCell pnl={h.unrealized_pnl} pct={h.unrealized_pnl_pct} />
+                    </td>
+                    <td className="textRight">
+                      {dividendSymbol === h.symbol ? (
+                        <div className="dividendInputRow">
+                          <input
+                            className="miniInput dividendInput"
+                            type="number"
+                            placeholder="Amount"
+                            value={dividendAmount}
+                            onChange={(e) => setDividendAmount(e.target.value)}
+                            autoFocus
+                          />
+                          <button className="btn btnGhost" onClick={addDividend} disabled={isSubmittingDiv}>
+                            {isSubmittingDiv ? '...' : 'Add'}
+                          </button>
+                          <button className="btn btnGhost" onClick={() => setDividendSymbol(null)}>×</button>
+                        </div>
+                      ) : (
+                        <button className="btn btnGhost" onClick={() => {
+                          setDividendSymbol(h.symbol)
+                          setDividendAmount('')
+                        }}>
+                          + Dividend
                         </button>
-                        <button className="btn btnGhost" onClick={() => setDividendSymbol(null)}>×</button>
-                      </div>
-                    ) : (
-                      <button className="btn btnGhost" onClick={() => {
-                        setDividendSymbol(h.symbol)
-                        setDividendAmount('')
-                      }}>
-                        + Dividend
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
               {openHoldings.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="muted">
+                  <td colSpan={9} className="muted">
                     No open positions yet. Add trades on the Trades tab.
                   </td>
                 </tr>

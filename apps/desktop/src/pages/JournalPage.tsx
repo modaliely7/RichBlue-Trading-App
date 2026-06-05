@@ -8,6 +8,7 @@ import type { Market, Trade, TradeUpdate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 import { StrategySelect } from '../components/StrategySelect'
+import { SymbolPicker } from '../components/SymbolPicker'
 import { Button } from '../components/ui'
 
 
@@ -563,7 +564,11 @@ export function JournalPage() {
                 <div className="formGrid detailsForm">
                   <label>
                     <div className="label">Symbol</div>
-                    <input value={draft.symbol} onChange={(e) => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })} />
+                    <SymbolPicker
+                      value={draft.symbol}
+                      onChange={(s) => setDraft({ ...draft, symbol: s })}
+                      market={draft.market}
+                    />
                   </label>
                   <label>
                     <div className="label">Market</div>

@@ -10,6 +10,7 @@ import { PortfolioPage } from './pages/PortfolioPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CalculatorsPage } from './pages/CalculatorsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { CashPage } from './pages/CashPage'
 import { StrategiesPage } from './pages/StrategiesPage'
 import { AddTradePage } from './pages/AddTradePage'
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/trades/add" element={<AddTradePage />} />
           <Route path="/data" element={<DataPage />} />
           <Route path="/calculators" element={<CalculatorsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

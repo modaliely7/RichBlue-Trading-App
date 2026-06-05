@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
-import { api, type OverviewResponse } from '../lib/api'
+import { MarketStatusPill } from '../components/MarketStatusPill'
+import { api, type OverviewResponse, type MarketStatus } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 
@@ -67,6 +68,14 @@ export function DashboardPage() {
     queryKey: ['overview', currentAccount?.id],
     queryFn: () => api.overview(currentAccount?.id ?? 1),
   })
+
+  const { data: marketStatus } = useQuery<MarketStatus>({
+    queryKey: ['market-status'],
+    queryFn: () => api.getMarketStatus(),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+  void marketStatus
 
 
 
@@ -169,7 +178,7 @@ export function DashboardPage() {
           <div className="pageSubtitle">Portfolio overview & performance summary</div>
         </div>
         <div className="detailsActions">
-          <div className="statusPill">EGX • Stocks</div>
+          <MarketStatusPill />
           <OverviewSyncBar />
         </div>
       </div>

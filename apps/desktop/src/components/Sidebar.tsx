@@ -12,6 +12,7 @@ import {
   Calculator,
   Database,
   Settings as SettingsIcon,
+  FileText,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import type { ComponentType } from 'react'
@@ -51,6 +52,7 @@ const sections: Section[] = [
     title: 'Insights',
     items: [
       { to: '/analytics', label: 'Performance', icon: TrendingUp },
+      { to: '/reports', label: 'Reports', icon: FileText },
     ],
   },
   {

@@ -8,6 +8,7 @@ import type { Market, TradeCreate } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 import { StrategySelect } from '../components/StrategySelect'
+import { SymbolPicker } from '../components/SymbolPicker'
 import { PageHeader, Button } from '../components/ui'
 
 function toDatetimeLocalValue(iso: string) {
@@ -198,12 +199,11 @@ export function AddTradePage() {
             <div className="formGrid detailsForm">
               <label>
                 <div className="label">Symbol</div>
-                <input
-                  type="text"
-                  autoComplete="off"
+                <SymbolPicker
                   value={symbol}
-                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                  placeholder="e.g., TSLA, AAPL"
+                  onChange={setSymbol}
+                  market={market}
+                  placeholder={market === 'Stocks' ? 'Search EGX ticker or name…' : 'e.g., TSLA, AAPL'}
                 />
                 {detectedName && (
                   <div className="detectedName">

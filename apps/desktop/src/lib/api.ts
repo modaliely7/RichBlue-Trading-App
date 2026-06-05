@@ -121,6 +121,7 @@ export type HoldingRow = {
   current_price: number | null
   market_value: number | null
   unrealized_pnl: number | null
+  unrealized_pnl_pct: number | null
 }
 
 export type OverviewKpis = {
@@ -159,6 +160,87 @@ export type SymbolLookupResponse = {
   symbol: string
   company_name: string | null
   quote_type: string | null
+}
+
+export type EgxSymbol = {
+  id: number
+  canonical: string
+  name_en: string
+  name_ar: string | null
+  sector: string | null
+  exchange: string
+  currency: string
+  country: string
+  is_active: boolean
+  last_loaded_at: string | null
+  last_price: number | null
+  last_price_at: string | null
+}
+
+export type Quote = {
+  symbol: string
+  price: number
+  currency: string
+  provider: string
+  fetched_at: string
+  previous_close: number | null
+  day_high: number | null
+  day_low: number | null
+  day_change: number | null
+  day_change_pct: number | null
+  year_high: number | null
+  year_low: number | null
+  volume: number | null
+  market_state: string | null
+  is_market_open: boolean | null
+}
+
+export type Quotes = { quotes: Quote[] }
+
+export type PricePoint = {
+  at: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export type PriceHistoryResponse = {
+  symbol: string
+  points: PricePoint[]
+}
+
+export type MarketStatus = {
+  is_market_open: boolean
+  session_label: string
+  next_open_at: string | null
+  next_close_at: string | null
+  last_refresh_at: string | null
+  symbols_in_db: number
+  provider: string
+  note: string | null
+}
+
+export type RefreshResult = {
+  requested: string[]
+  success: string[]
+  errors: Record<string, string>
+  started_at: string
+  finished_at: string | null
+  ok_count: number
+  fail_count: number
+}
+
+export type EodSchedule = {
+  id: number
+  market_code: string
+  market_name: string
+  eod_hour: number
+  eod_minute: number
+  timezone: string
+  is_active: boolean
+  updated_at: string
 }
 
 export type LessonCategory = 'Mistake' | 'Lesson' | 'Psychological note' | 'Strategy insight'
@@ -326,6 +408,29 @@ export const api = {
   exportTradesCsv: (accountId: number = 1) => download(`/trades/export/csv?account_id=${accountId}`),
   deleteTrade: (id: number) => apiFetch<{ deleted: true }>(`/trades/${id}`, { method: 'DELETE' }),
 
+  downloadValuation: (format: 'pdf' | 'xlsx', accountId: number = 1) =>
+    download(`/reports/valuation.${format}?account_id=${accountId}`),
+  downloadRealizedUnrealized: (format: 'pdf' | 'xlsx', start?: string, end?: string, accountId: number = 1) => {
+    const q = new URLSearchParams({ account_id: String(accountId) })
+    if (start) q.set('start', start)
+    if (end) q.set('end', end)
+    return download(`/reports/realized-unrealized.${format}?${q.toString()}`)
+  },
+  downloadCostVsMarket: (format: 'pdf' | 'xlsx', accountId: number = 1) =>
+    download(`/reports/cost-vs-market.${format}?account_id=${accountId}`),
+  downloadTax: (format: 'pdf' | 'xlsx', start?: string, end?: string, accountId: number = 1) => {
+    const q = new URLSearchParams({ account_id: String(accountId) })
+    if (start) q.set('start', start)
+    if (end) q.set('end', end)
+    return download(`/reports/tax.${format}?${q.toString()}`)
+  },
+  downloadMonthlyDigest: (format: 'pdf' | 'xlsx', start?: string, end?: string, accountId: number = 1) => {
+    const q = new URLSearchParams({ account_id: String(accountId) })
+    if (start) q.set('start', start)
+    if (end) q.set('end', end)
+    return download(`/reports/monthly-digest.${format}?${q.toString()}`)
+  },
+
   listPsychology: (accountId: number = 1) => apiFetch<PsychologyEntry[]>(`/psychology?account_id=${accountId}`),
   createPsychology: (payload: PsychologyCreate) =>
     apiFetch<PsychologyEntry>('/psychology', { method: 'POST', body: JSON.stringify(payload) }),
@@ -348,6 +453,8 @@ export const api = {
   deleteAsset: (id: number) => apiFetch<{ deleted: true }>(`/assets/${id}`, { method: 'DELETE' }),
   portfolioSummary: (accountId: number = 1) => apiFetch<PortfolioSummary>(`/portfolio/summary?account_id=${accountId}`),
   portfolioHoldings: (accountId: number = 1) => apiFetch<HoldingRow[]>(`/portfolio/holdings?account_id=${accountId}`),
+  portfolioRefreshPrices: (accountId: number = 1) =>
+    apiFetch<RefreshResult>(`/portfolio/refresh-prices?account_id=${accountId}`, { method: 'POST' }),
 
   listLessons: (params: { q?: string; category?: string; account_id?: number } = {}) => {
     const q = new URLSearchParams()
@@ -420,4 +527,39 @@ export const api = {
   updateStrategy: (id: number, payload: StrategyUpdate) =>
     apiFetch<Strategy>(`/strategies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   deleteStrategy: (id: number) => apiFetch<{ deleted: true }>(`/strategies/${id}`, { method: 'DELETE' }),
+
+  // Market data (Phase 6)
+  listEgxSymbols: (query?: string, limit: number = 50) => {
+    const q = new URLSearchParams()
+    if (query) q.set('query', query)
+    q.set('limit', String(limit))
+    return apiFetch<EgxSymbol[]>(`/market-data/egx-symbols?${q.toString()}`)
+  },
+  getQuote: (symbol: string, useCache: boolean = true) => {
+    const q = new URLSearchParams()
+    if (!useCache) q.set('use_cache', 'false')
+    const suffix = q.toString() ? `?${q.toString()}` : ''
+    return apiFetch<Quote>(`/market-data/quote/${encodeURIComponent(symbol)}${suffix}`)
+  },
+  getQuotes: (symbols: string[]) => {
+    const q = new URLSearchParams()
+    for (const s of symbols) q.append('symbols', s)
+    return apiFetch<Quotes>(`/market-data/quotes?${q.toString()}`)
+  },
+  getPriceHistory: (symbol: string, days: number = 180) =>
+    apiFetch<PriceHistoryResponse>(`/market-data/history/${encodeURIComponent(symbol)}?days=${days}`),
+  getMarketStatus: () => apiFetch<MarketStatus>('/market-data/status'),
+  refreshMarketData: (symbols?: string[]) => {
+    const q = new URLSearchParams()
+    if (symbols) for (const s of symbols) q.append('symbols', s)
+    const suffix = q.toString() ? `?${q.toString()}` : ''
+    return apiFetch<RefreshResult>(`/market-data/refresh${suffix}`, { method: 'POST' })
+  },
+  refreshMarketDataNow: () =>
+    apiFetch<RefreshResult>('/settings/market-data/refresh-now', { method: 'POST' }),
+  getEodSchedule: () => apiFetch<EodSchedule[]>('/settings/market-data/schedule'),
+  updateEodSchedule: (id: number, payload: Partial<Pick<EodSchedule, 'eod_hour' | 'eod_minute' | 'timezone' | 'is_active'>>) =>
+    apiFetch<EodSchedule>(`/settings/market-data/schedule/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  refreshSymbolsCatalog: () =>
+    apiFetch<{ touched: number }>('/market-data/refresh-symbols', { method: 'POST' }),
 }
