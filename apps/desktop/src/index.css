@@ -2782,3 +2782,198 @@ textarea:focus {
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* ─── Add Trade Page ───────────────────────────────────── */
+.detectedName {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.detectedMeta {
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.symbolDetecting {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.labelWithToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.autoToggle {
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted2);
+  user-select: none;
+}
+
+.autoToggle input {
+  width: 10px;
+  height: 10px;
+  margin: 0;
+}
+
+.autoToggle.active {
+  color: var(--accent);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.pricePctGrid {
+  display: grid;
+  grid-template-columns: 1fr 80px;
+  gap: 10px;
+}
+
+.riskMetricSub {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.riskPanel {
+  border-left: 4px solid var(--accent);
+}
+
+.sizingBlock {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.sizingRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.sizingInput {
+  flex: 1;
+}
+
+.sizingResult {
+  flex: 1.5;
+  text-align: right;
+}
+
+.sizingResultLabel {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted2);
+  margin-bottom: 2px;
+}
+
+.sizingResultValue {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.sizingResultUnit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sizingCashNote {
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.rrBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--panel2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.rrBannerValue {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-strong);
+  margin-top: 2px;
+}
+
+.rrBannerValue.good {
+  color: var(--accent2);
+}
+
+.rrBannerEmoji {
+  font-size: 24px;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.summaryRowFinal {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.summaryRowFinal .mono {
+  color: var(--text-strong);
+}
+
+.summaryDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.summaryWarn {
+  font-size: 12px;
+  text-align: right;
+  margin-top: -4px;
+}
+
+.actionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.fieldDisabled {
+  opacity: 0.5;
+}
+
+.panelTitleIcon {
+  display: inline;
+  margin-right: 6px;
+  vertical-align: middle;
+}

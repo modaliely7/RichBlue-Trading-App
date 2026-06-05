@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { ShieldCheck, Ruler } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse, type Strategy } from '../lib/api'
 import type { Market, TradeCreate } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 import { StrategySelect } from '../components/StrategySelect'
+import { PageHeader, Button } from '../components/ui'
 
 function toDatetimeLocalValue(iso: string) {
   const d = new Date(iso)
@@ -44,9 +46,9 @@ export function AddTradePage() {
   const navigate = useNavigate()
   const accountId = currentAccount?.id ?? 1
 
-  const { data: ov } = useQuery<OverviewResponse>({ 
-    queryKey: ['overview', accountId], 
-    queryFn: () => api.overview(accountId) 
+  const { data: ov } = useQuery<OverviewResponse>({
+    queryKey: ['overview', accountId],
+    queryFn: () => api.overview(accountId)
   })
 
   const [symbol, setSymbol] = useState('')
@@ -59,12 +61,12 @@ export function AddTradePage() {
   const [takeProfitStr, setTakeProfitStr] = useState('')
   const [slPctStr, setSlPctStr] = useState('')
   const [tpPctStr, setTpPctStr] = useState('')
-  const [riskPctOfAccount, setRiskPctOfAccount] = useState('1') // Default 1%
+  const [riskPctOfAccount, setRiskPctOfAccount] = useState('1')
   const [indicatorsUsed, setIndicatorsUsed] = useState('')
   const [lessonsLearned, setLessonsLearned] = useState('')
   const [notes, setNotes] = useState('')
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<number[]>([])
-  
+
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectedName, setDetectedName] = useState<string | null>(null)
   const [isAutoFees, setIsAutoFees] = useState(true)
@@ -108,7 +110,6 @@ export function AddTradePage() {
     return () => clearTimeout(timer)
   }, [symbol, ov?.trades])
 
-  // Sync SL % when Price changes
   useEffect(() => {
     const ep = parseDecimal(entryPriceStr)
     const sl = parseDecimal(stopLossStr)
@@ -118,7 +119,6 @@ export function AddTradePage() {
     }
   }, [entryPriceStr, stopLossStr])
 
-  // Handlers for percentage changes
   const handleSlPctChange = (val: string) => {
     const raw = normalizeDecimalTyping(slPctStr, val)
     setSlPctStr(raw)
@@ -154,7 +154,6 @@ export function AddTradePage() {
     }
   })
 
-  // Calculations
   const entryPx = parseDecimal(entryPriceStr)
   const exitPx = parseDecimal(exitPriceStr)
   const sizeNum = parseDecimal(sizeStr)
@@ -162,7 +161,6 @@ export function AddTradePage() {
   const tpPx = parseDecimal(takeProfitStr)
   const hasExitOnCreate = exitPriceStr.trim() !== ''
 
-  // Using standard formula from previous instructions
   const calcEntryFees = entryPx > 0 && sizeNum > 0 ? (entryPx * sizeNum * 0.00125) + 3 : 0
   const calcExitFees = exitPx > 0 && sizeNum > 0 ? (exitPx * sizeNum * 0.00125) + 3 : 0
 
@@ -174,34 +172,27 @@ export function AddTradePage() {
   const cashOk = cashAvailable >= requiredCash
   const canCreate = symbol.trim() && entryPx > 0 && sizeNum > 0
 
-  // Risk Management Calculations
   const riskPerShare = entryPx > 0 && slPx > 0 ? Math.abs(entryPx - slPx) : 0
   const rewardPerShare = entryPx > 0 && tpPx > 0 ? Math.abs(tpPx - entryPx) : 0
   const totalRisk = riskPerShare * sizeNum
   const totalReward = rewardPerShare * sizeNum
   const rrRatio = riskPerShare > 0 ? rewardPerShare / riskPerShare : 0
 
-  // Position Sizing Recommendation
   const accountRiskVal = parseDecimal(riskPctOfAccount)
-  const recommendedSize = (riskPerShare > 0 && accountRiskVal > 0) 
+  const recommendedSize = (riskPerShare > 0 && accountRiskVal > 0)
     ? Math.floor((cashAvailable * (accountRiskVal / 100)) / riskPerShare)
     : 0
 
   return (
     <div className="page">
-      <div className="pageHeader">
-        <div>
-          <div className="pageTitle">Add New Trade</div>
-          <div className="pageSubtitle">Record your entry and strategies.</div>
-        </div>
-        <div className="detailsActions">
-          <OverviewSyncBar />
-        </div>
-      </div>
+      <PageHeader
+        title="Add New Trade"
+        subtitle="Record your entry and strategies."
+        actions={<OverviewSyncBar />}
+      />
 
       <div className="tradeSplit mt24">
-        <div className="flexCol" style={{ gap: 24 }}>
-          {/* Main Details */}
+        <div className="flexCol">
           <div className="card panel">
             <div className="panelTitle">Trade Configuration</div>
             <div className="formGrid detailsForm">
@@ -215,11 +206,11 @@ export function AddTradePage() {
                   placeholder="e.g., TSLA, AAPL"
                 />
                 {detectedName && (
-                  <div className="mt4" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
-                    ✓ {detectedName} <span style={{ opacity: 0.6, fontWeight: 400 }}>({market})</span>
+                  <div className="detectedName">
+                    ✓ {detectedName} <span className="detectedMeta">({market})</span>
                   </div>
                 )}
-                {isDetecting && <div className="muted mt4" style={{ fontSize: 11 }}>Validating symbol...</div>}
+                {isDetecting && <div className="muted symbolDetecting">Validating symbol...</div>}
               </label>
 
               <label>
@@ -266,13 +257,13 @@ export function AddTradePage() {
               </label>
 
               <label>
-                <div className="label">
+                <div className="labelWithToggle">
                   <span>Entry Fees</span>
-                  <span 
-                    style={{ fontSize: 10, cursor: 'pointer', color: isAutoFees ? 'var(--accent)' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}
+                  <span
+                    className={`autoToggle ${isAutoFees ? 'active' : ''}`}
                     onClick={() => setIsAutoFees(!isAutoFees)}
                   >
-                    <input type="checkbox" checked={isAutoFees} readOnly style={{ width: 10, height: 10 }} /> Auto
+                    <input type="checkbox" checked={isAutoFees} readOnly /> Auto
                   </span>
                 </div>
                 <input
@@ -288,7 +279,7 @@ export function AddTradePage() {
 
               <label className="span2">
                 <div className="label">Strategies</div>
-                <StrategySelect 
+                <StrategySelect
                   allStrategies={strategies}
                   selectedIds={selectedStrategyIds}
                   onChange={setSelectedStrategyIds}
@@ -306,20 +297,20 @@ export function AddTradePage() {
 
               <label>
                 <div className="label">Exit Date</div>
-                <input 
-                  type="datetime-local" 
-                  value={exitDateLocal} 
-                  onChange={e => setExitDateLocal(e.target.value)} 
+                <input
+                  type="datetime-local"
+                  value={exitDateLocal}
+                  onChange={e => setExitDateLocal(e.target.value)}
                   disabled={!hasExitOnCreate}
-                  style={{ opacity: hasExitOnCreate ? 1 : 0.5 }}
+                  className={!hasExitOnCreate ? 'fieldDisabled' : ''}
                 />
               </label>
 
               <label className="span2">
                 <div className="label">Indicators Used</div>
-                <input 
-                  type="text" 
-                  value={indicatorsUsed} 
+                <input
+                  type="text"
+                  value={indicatorsUsed}
                   onChange={e => setIndicatorsUsed(e.target.value)}
                   placeholder="e.g. RSI, EMA 200, VWAP"
                 />
@@ -338,12 +329,14 @@ export function AddTradePage() {
           </div>
         </div>
 
-        <div className="sideColCards" style={{ gap: 20 }}>
-          {/* Risk Management Side Panel */}
-          <div className="card panel" style={{ borderLeft: '4px solid var(--accent)' }}>
-            <div className="panelTitle">🛡️ Risk Management</div>
-            <div className="flexCol" style={{ gap: 16, marginTop: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 10 }}>
+        <div className="sideColCards">
+          <div className="card panel riskPanel">
+            <div className="panelTitle">
+              <ShieldCheck size={16} className="panelTitleIcon" />
+              Risk Management
+            </div>
+            <div className="fieldGroup">
+              <div className="pricePctGrid">
                 <label>
                   <div className="label">Stop Loss (Price)</div>
                   <input
@@ -366,7 +359,7 @@ export function AddTradePage() {
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px', gap: 10 }}>
+              <div className="pricePctGrid">
                 <label>
                   <div className="label">Take Profit (Price)</div>
                   <input
@@ -393,85 +386,88 @@ export function AddTradePage() {
                 <div className="metricCard">
                   <div className="muted">Risk Amount</div>
                   <div className="metricCardValue bad">{formatCurrency(totalRisk)}</div>
-                  <div className="muted" style={{ fontSize: 11, opacity: 0.7 }}>{slPctStr}% move</div>
+                  <div className="muted riskMetricSub">{slPctStr}% move</div>
                 </div>
                 <div className="metricCard">
                   <div className="muted">Target Profit</div>
                   <div className="metricCardValue good">{formatCurrency(totalReward)}</div>
-                  <div className="muted" style={{ fontSize: 11, opacity: 0.7 }}>{tpPctStr}% move</div>
+                  <div className="muted riskMetricSub">{tpPctStr}% move</div>
                 </div>
               </div>
 
-              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                <div className="panelTitle">📏 Position Sizing Helper</div>
-                <div className="flexRow" style={{ gap: 12 }}>
-                  <label className="flex1">
+              <div className="sizingBlock">
+                <div className="panelTitle">
+                  <Ruler size={16} className="panelTitleIcon" />
+                  Position Sizing Helper
+                </div>
+                <div className="sizingRow">
+                  <label className="sizingInput">
                     <div className="label">Risk % of Account</div>
                     <input
                       type="text"
                       value={riskPctOfAccount}
                       onChange={e => setRiskPctOfAccount(normalizeDecimalTyping(riskPctOfAccount, e.target.value))}
-                      style={{ height: 36 }}
                     />
                   </label>
-                  <div style={{ flex: 1.5, textAlign: 'right' }}>
-                    <div className="muted">RECOMMENDED SIZE</div>
-                    <div className="accent" style={{ fontSize: 18, fontWeight: 900 }}>{recommendedSize} <span style={{ fontSize: 12, fontWeight: 500 }}>shares</span></div>
-                    <button
-                      className="btn-ghost mt4"
+                  <div className="sizingResult">
+                    <div className="sizingResultLabel">RECOMMENDED SIZE</div>
+                    <div className="sizingResultValue">
+                      {recommendedSize} <span className="sizingResultUnit">shares</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt4"
                       onClick={() => setSizeStr(String(recommendedSize))}
                       disabled={recommendedSize <= 0}
                     >
                       Apply to Size
-                    </button>
+                    </Button>
                   </div>
                 </div>
-                <div className="muted mt8">
+                <div className="muted sizingCashNote">
                   Based on current cash: <strong>{formatCurrency(cashAvailable)}</strong>
                 </div>
               </div>
 
-              <div className={`riskBanner ${rrRatio >= 2 ? 'status-ok' : ''}`} style={{ marginTop: 4 }}>
+              <div className="rrBanner">
                 <div>
                   <div className="muted">R/R Ratio</div>
-                  <div className={rrRatio >= 2 ? 'good' : 'strong'} style={{ fontSize: 20, fontWeight: 900 }}>
+                  <div className={rrRatio >= 2 ? 'rrBannerValue good' : 'rrBannerValue'}>
                     {rrRatio.toFixed(2)}
                   </div>
                 </div>
-                {rrRatio >= 2 && <div style={{ fontSize: 24 }}>🚀</div>}
+                {rrRatio >= 2 && <span className="rrBannerEmoji" aria-hidden>🚀</span>}
               </div>
             </div>
           </div>
 
           <div className="card panel">
             <div className="panelTitle">Summary</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <div className="summary">
+              <div className="summaryRow">
                 <span className="muted">Total Value</span>
                 <span className="mono">{(entryPx * sizeNum).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <div className="summaryRow">
                 <span className="muted">Total Fees</span>
                 <span className="mono">{feesNum.toLocaleString()}</span>
               </div>
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700 }}>
+              <div className="summaryDivider" />
+              <div className="summaryRowFinal">
                 <span>Required Cash</span>
-                <span className="mono" style={{ color: 'var(--text-strong)' }}>{formatCurrency(requiredCash)}</span>
+                <span className="mono">{formatCurrency(requiredCash)}</span>
               </div>
               {!cashOk && !hasExitOnCreate && (
-                <div className="error" style={{ fontSize: 12, textAlign: 'right', marginTop: -4 }}>
-                  ⚠️ Insufficient cash in account
-                </div>
+                <div className="error summaryWarn">⚠️ Insufficient cash in account</div>
               )}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
-              <button 
-                className="btn" 
-                style={{ width: '100%' }}
+            <div className="actionStack">
+              <Button
+                fullWidth
                 disabled={!canCreate || (!cashOk && !hasExitOnCreate) || createMutation.isPending}
+                loading={createMutation.isPending}
                 onClick={() => {
                   createMutation.mutate({
                     symbol: symbol.trim().toUpperCase(),
@@ -494,14 +490,10 @@ export function AddTradePage() {
                 }}
               >
                 {createMutation.isPending ? 'Saving...' : 'Confirm Trade'}
-              </button>
-              <button 
-                className="btn btnGhost" 
-                style={{ width: '100%' }}
-                onClick={() => navigate('/trades')}
-              >
+              </Button>
+              <Button variant="ghost" fullWidth onClick={() => navigate('/trades')}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -509,4 +501,3 @@ export function AddTradePage() {
     </div>
   )
 }
-
