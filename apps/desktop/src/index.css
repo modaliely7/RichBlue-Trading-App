@@ -3076,3 +3076,154 @@ textarea:focus {
 }
 
 .textRight { text-align: right; }
+
+/* ─── Journal Page ─────────────────────────────────────── */
+.dividendModal {
+  width: 450px;
+  max-width: 90%;
+  border: 1px solid var(--accent-dim);
+}
+
+.dividendModalActions {
+  justify-content: flex-end;
+}
+
+.toolbarWrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filterPill {
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.filterPill.active {
+  opacity: 1;
+}
+
+.filterPillDynamic {
+  cursor: pointer;
+  opacity: 0.6;
+  background: var(--bg);
+}
+
+.filterPillDynamic.active {
+  opacity: 1;
+  background: var(--accent);
+  color: #fff;
+}
+
+.tradesTablePanel {
+  min-width: 0;
+}
+
+.tableActionRow {
+  justify-content: flex-end;
+}
+
+.searchInput {
+  width: 180px;
+}
+
+.filterSelect {
+  width: 150px;
+}
+
+.rowClickable {
+  cursor: pointer;
+}
+
+.strategyChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.strategyChip {
+  background: var(--accent-dim);
+  color: var(--text-strong);
+  border: none;
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.detailsSectionDivider {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.labelSplit {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.labelComputed {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.labelWithAuto {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.autoToggleTiny {
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  color: var(--muted2);
+  user-select: none;
+}
+
+.autoToggleTiny input {
+  width: 10px;
+  height: 10px;
+  margin: 0;
+}
+
+.autoToggleTiny.active {
+  color: var(--accent);
+}
+
+.editFormActions {
+  grid-column: 1 / -1;
+}
+
+.screenshotRow {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lightboxTrigger {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.screenshotThumb {
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 8px;
+  display: block;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}

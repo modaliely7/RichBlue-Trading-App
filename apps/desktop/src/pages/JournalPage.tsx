@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, tradeScreenshotPublicUrl, type OverviewResponse } from '../lib/api'
 import type { Market, Trade, TradeUpdate } from '../lib/api'
 import { formatCurrency, formatDuration, formatPct } from '../lib/format'
 import { useAccount } from '../components/AccountContext'
 import { StrategySelect } from '../components/StrategySelect'
-
-
+import { Button } from '../components/ui'
 
 
 
@@ -18,7 +18,6 @@ function toDatetimeLocalValue(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** Allows typing decimals without awkward leading zeros (e.g. 0100 → 100). */
 function normalizeDecimalTyping(prev: string, raw: string): string {
   if (raw === '') return ''
   if (!/^-?\d*\.?\d*$/.test(raw)) return prev
@@ -30,21 +29,11 @@ function parseDecimal(s: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** 
- * Safely evaluates simple math expressions for fees.
- * Supports: digits, ., +, -, *, /, %, (, )
- * Example: "(100 * 50 * 0.125%) + 3"
- */
 function evaluateEquation(eq: string): number {
   if (!eq.trim()) return 0
   try {
-    // 1. Replace percentages: 0.125% -> (0.125/100)
     let sanitized = eq.replace(/(\d*\.?\d+)%/g, '($1/100)')
-
-    // 2. Remove anything that isn't a safe math char
     sanitized = sanitized.replace(/[^0-9.\+\-\*\/\(\)\s]/g, '')
-
-    // 3. Eval (simple enough for this use case, and sanitized)
     // eslint-disable-next-line no-eval
     const result = eval(sanitized)
     return Number.isFinite(result) ? result : 0
@@ -97,8 +86,6 @@ function tradeToDraft(t: Trade): TradeDraft {
   }
 }
 
-
-
 function DividendModal({
   onClose,
   accountId,
@@ -136,7 +123,7 @@ function DividendModal({
 
   return (
     <div className="modalOverlay" onClick={onClose}>
-      <div className="card panel" onClick={e => e.stopPropagation()} style={{ width: 450, maxWidth: '90%', border: '1px solid var(--accent-dim)' }}>
+      <div className="card panel dividendModal" onClick={e => e.stopPropagation()}>
         <div className="panelTitle">Record Dividend</div>
         <div className="muted">Link a dividend payment or stock bonus to an open trade.</div>
         <div className="formGrid">
@@ -168,9 +155,9 @@ function DividendModal({
             <div className="label">Note</div>
             <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional description" />
           </label>
-          <div className="detailsActions span2" style={{ justifyContent: 'flex-end' }}>
-            <button className="btnGhost" onClick={onClose}>Cancel</button>
-            <button className="btn" disabled={!tradeId || !amount || mutation.isPending} onClick={() => {
+          <div className="detailsActions span2 dividendModalActions">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button disabled={!tradeId || !amount || mutation.isPending} onClick={() => {
               mutation.mutate({
                 symbol: selectedTrade?.symbol || '',
                 amount: parseDecimal(amount),
@@ -181,7 +168,7 @@ function DividendModal({
               })
             }}>
               {mutation.isPending ? 'Saving...' : 'Save Dividend'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -358,51 +345,62 @@ export function JournalPage() {
           <div className="pageTitle">Trade Journal</div>
           <div className="pageSubtitle">Review your trade history and analyze performance.</div>
         </div>
-        <div className="detailsActions" style={{ flexWrap: 'wrap', justifyContent: 'flex-end', gap: 12 }}>
-          <button className="btn btnPrimary" onClick={() => navigate('/trades/add')}>+ Add New Trade</button>
-          <button className="btn btnGhost" onClick={() => setIsDividendModalOpen(true)}>Record Dividend</button>
+        <div className="detailsActions toolbarWrap">
+          <Button leftIcon={<Plus size={16} />} onClick={() => navigate('/trades/add')}>
+            Add New Trade
+          </Button>
+          <Button variant="ghost" onClick={() => setIsDividendModalOpen(true)}>
+            Record Dividend
+          </Button>
           <OverviewSyncBar />
         </div>
       </div>
 
-      <div className="card" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      <div className="card filterBar">
         <span className="muted">Filter by Strategy:</span>
-        <span 
-          className={`statusPill ${!tradeSearch ? 'status-ok' : ''}`} 
-          style={{ cursor: 'pointer', opacity: !tradeSearch ? 1 : 0.6 }}
+        <span
+          className={`statusPill filterPill ${!tradeSearch ? 'active' : ''}`}
           onClick={() => setTradeSearch('')}
         >
           All
         </span>
-        {Array.from(new Map(allStrategies.map(s => [s.name.toUpperCase(), s])).values()).map(s => (
-          <span 
-            key={s.id} 
-            className={`statusPill ${tradeSearch.toUpperCase() === s.name.toUpperCase() ? 'status-ok' : ''}`}
-            style={{ 
-              cursor: 'pointer', 
-              background: tradeSearch.toUpperCase() === s.name.toUpperCase() ? (s.color || 'var(--accent)') : 'var(--bg)',
-              opacity: !tradeSearch || tradeSearch.toUpperCase() === s.name.toUpperCase() ? 1 : 0.6
-            }}
-            onClick={() => setTradeSearch(s.name)}
-          >
-            {s.name}
-          </span>
-        ))}
+        {Array.from(new Map(allStrategies.map(s => [s.name.toUpperCase(), s])).values()).map(s => {
+          const isActive = tradeSearch.toUpperCase() === s.name.toUpperCase()
+          return (
+            <span
+              key={s.id}
+              className={`statusPill filterPillDynamic ${isActive ? 'active' : ''}`}
+              style={!isActive && s.color ? { background: s.color } : undefined}
+              onClick={() => setTradeSearch(s.name)}
+            >
+              {s.name}
+            </span>
+          )
+        })}
       </div>
 
       {isLoading ? <div className="muted">Loading…</div> : null}
       {error ? <div className="error">Failed to load trades. Start the API server.</div> : null}
 
       <div className="tradeSplit">
-        <div className="card panel" style={{ minWidth: 0 }}>
+        <div className="card panel tradesTablePanel">
           <div className="panelTitleRow">
             <div className="panelTitle">Trades</div>
-            <div className="detailsActions" style={{ justifyContent: 'flex-end' }}>
+            <div className="detailsActions tableActionRow">
               <div className="muted">
                 Bought: {formatCurrency(totalBought)} | Sold: {formatCurrency(totalSold)}
               </div>
-              <input className="miniInput" style={{ width: 180 }} value={tradeSearch} onChange={(e) => setTradeSearch(e.target.value)} placeholder="Search symbol…" />
-              <select className="miniInput" style={{ width: 150 }} value={tradeStatus} onChange={(e) => setTradeStatus(e.target.value as 'all' | 'open' | 'closed')}>
+              <input
+                className="miniInput searchInput"
+                value={tradeSearch}
+                onChange={(e) => setTradeSearch(e.target.value)}
+                placeholder="Search symbol…"
+              />
+              <select
+                className="miniInput filterSelect"
+                value={tradeStatus}
+                onChange={(e) => setTradeStatus(e.target.value as 'all' | 'open' | 'closed')}
+              >
                 <option value="all">All trades</option>
                 <option value="open">Open only</option>
                 <option value="closed">Closed only</option>
@@ -430,7 +428,11 @@ export function JournalPage() {
               </thead>
               <tbody>
                 {rows.map((t) => (
-                  <tr key={t.id} className={selectedId === t.id ? 'rowSelected' : ''} onClick={() => setSelectedId(t.id)} style={{ cursor: 'pointer' }}>
+                  <tr
+                    key={t.id}
+                    className={`${selectedId === t.id ? 'rowSelected' : ''} rowClickable`}
+                    onClick={() => setSelectedId(t.id)}
+                  >
                     <td className="mono">{t.exit_price == null ? 'OPEN' : 'CLOSED'}</td>
                     <td className="mono">{t.symbol}</td>
                     <td>{t.market}</td>
@@ -441,16 +443,16 @@ export function JournalPage() {
                     <td className={t.pnl != null && t.pnl >= 0 ? 'good' : 'bad'}>{t.pnl == null ? '—' : formatCurrency(t.pnl)}</td>
                     <td>{t.return_pct == null ? '—' : formatPct(t.return_pct)}</td>
                     <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      <div className="strategyChips">
                         {t.strategies?.map(s => (
                           <span
                             key={s.id}
-                            className="statusPill clickableTag"
+                            className="statusPill clickableTag strategyChip"
+                            style={s.color ? { background: s.color } : undefined}
                             onClick={(e) => {
                               e.stopPropagation()
                               setTradeSearch(s.name)
                             }}
-                            style={{ background: s.color || 'var(--accent-dim)', color: 'var(--text-strong)', border: 'none', fontSize: 10, padding: '2px 6px', cursor: 'pointer' }}
                           >
                             {s.name}
                           </span>
@@ -461,8 +463,9 @@ export function JournalPage() {
                     <td>{getTradeStyle(t.entry_date, t.exit_price != null ? (t.exit_date || new Date().toISOString()) : null)}</td>
                     <td>{formatDuration(t.duration_seconds)}</td>
                     <td>
-                      <button
-                        className="btn btnGhost"
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         disabled={deleteMutation.isPending}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -470,7 +473,7 @@ export function JournalPage() {
                         }}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -486,7 +489,7 @@ export function JournalPage() {
           </div>
         </div>
 
-        <div className="card panel" style={{ minWidth: 0 }}>
+        <div className="card panel tradesTablePanel">
           <div className="panelTitle">Trade details & actions</div>
           {selectedTrade ? (
             <>
@@ -527,15 +530,13 @@ export function JournalPage() {
                     <span className="muted">Exit fees:</span>{' '}
                     <span className="mono">{formatCurrency(selectedTrade.exit_fees ?? 0)}</span>
                   </div>
-                  <div className="detailsLine" style={{ borderTop: '1px solid var(--border)', paddingTop: 4, marginTop: 4 }}>
+                  <div className="detailsLine detailsSectionDivider">
                     <span className="muted">Total fees:</span>{' '}
                     <span className="mono">{formatCurrency((selectedTrade.fees ?? 0) + (selectedTrade.exit_fees ?? 0))}</span>
                   </div>
 
                   <div className="detailsActions">
-                    <button type="button" className="btn" onClick={beginEdit}>
-                      Edit trade
-                    </button>
+                    <Button onClick={beginEdit}>Edit trade</Button>
                     <label className="fileBtn">
                       <input
                         type="file"
@@ -549,15 +550,15 @@ export function JournalPage() {
                       />
                       {uploadMutation.isPending ? 'Uploading…' : 'Upload Screenshot'}
                     </label>
-                    <button
-                      className="btn btnGhost"
+                    <Button
+                      variant="ghost"
                       disabled={selectedTrade.exit_price == null}
                       onClick={() =>
                         updateMutation.mutate({ id: selectedTrade.id, payload: { exit_price: null, exit_date: null, exit_fees: 0 } })
                       }
                     >
                       Re-open
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : (
@@ -604,9 +605,9 @@ export function JournalPage() {
                     />
                   </label>
                   <label>
-                    <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div className="labelSplit">
                       <span>Fees (entry)</span>
-                      {evaluateEquation(draft.fees) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>= {formatCurrency(evaluateEquation(draft.fees))}</span>}
+                      {evaluateEquation(draft.fees) > 0 && <span className="labelComputed">= {formatCurrency(evaluateEquation(draft.fees))}</span>}
                     </div>
                     <input
                       type="text"
@@ -615,14 +616,17 @@ export function JournalPage() {
                     />
                   </label>
                   <label>
-                    <div className="label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="labelSplit">
+                      <div className="labelWithAuto">
                         <span>Exit fees</span>
-                        <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: isAutoFeesEdit ? 'var(--accent)' : 'var(--muted)' }} onClick={() => setIsAutoFeesEdit(!isAutoFeesEdit)}>
-                          <input type="checkbox" checked={isAutoFeesEdit} onChange={() => { }} style={{ width: 10, height: 10 }} /> Auto
+                        <span
+                          className={`autoToggleTiny ${isAutoFeesEdit ? 'active' : ''}`}
+                          onClick={() => setIsAutoFeesEdit(!isAutoFeesEdit)}
+                        >
+                          <input type="checkbox" checked={isAutoFeesEdit} onChange={() => { }} /> Auto
                         </span>
                       </div>
-                      {evaluateEquation(draft.exit_fees) > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>= {formatCurrency(evaluateEquation(draft.exit_fees))}</span>}
+                      {evaluateEquation(draft.exit_fees) > 0 && <span className="labelComputed">= {formatCurrency(evaluateEquation(draft.exit_fees))}</span>}
                     </div>
                     <input
                       type="text"
@@ -663,20 +667,9 @@ export function JournalPage() {
                     <div className="label">Lessons Learned</div>
                     <textarea rows={2} value={draft.lessons_learned} onChange={(e) => setDraft({ ...draft, lessons_learned: e.target.value })} />
                   </label>
-                  <div className="detailsActions span2" style={{ gridColumn: '1 / -1' }}>
-                    <button type="button" className="btn" disabled={updateMutation.isPending} onClick={saveDraft}>
-                      Save changes
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btnGhost"
-                      onClick={() => {
-                        setEditMode(false)
-                        setDraft(null)
-                      }}
-                    >
-                      Cancel
-                    </button>
+                  <div className="detailsActions span2 editFormActions">
+                    <Button disabled={updateMutation.isPending} onClick={saveDraft}>Save changes</Button>
+                    <Button variant="ghost" onClick={() => { setEditMode(false); setDraft(null); }}>Cancel</Button>
                     <label className="fileBtn">
                       <input
                         type="file"
@@ -696,14 +689,11 @@ export function JournalPage() {
 
               {selectedTrade.screenshot_path ? (
                 <div>
-                  <div className="label">
-                    Screenshot
-                  </div>
-                  <div className="detailsActions" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                  <div className="label">Screenshot</div>
+                  <div className="detailsActions screenshotRow">
                     <button
                       type="button"
-                      className="btn btnGhost"
-                      style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                      className="lightboxTrigger"
                       onClick={() => {
                         const u = tradeScreenshotPublicUrl(selectedTrade.screenshot_path)
                         if (u) setLightboxUrl(u)
@@ -713,19 +703,18 @@ export function JournalPage() {
                       <img
                         src={tradeScreenshotPublicUrl(selectedTrade.screenshot_path) ?? undefined}
                         alt=""
-                        style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 8, display: 'block', border: '1px solid rgba(148,163,184,0.25)' }}
+                        className="screenshotThumb"
                       />
                     </button>
-                    <button
-                      type="button"
-                      className="btn btnGhost"
+                    <Button
+                      variant="ghost"
                       disabled={deleteScreenshotMutation.isPending}
                       onClick={() => {
                         if (confirm('Remove this screenshot?')) deleteScreenshotMutation.mutate(selectedTrade.id)
                       }}
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : null}
