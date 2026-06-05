@@ -736,8 +736,9 @@ def _add_cash_tx(
     return x
 
 
-def _compute_holdings(s, account_id: int = 1) -> list[HoldingRow]:
-    trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
+def _compute_holdings(s, account_id: int = 1, trades: list[Trade] | None = None) -> list[HoldingRow]:
+    if trades is None:
+        trades = s.execute(select(Trade).where(Trade.account_id == account_id)).scalars().all()
     assets = s.execute(select(Asset).where(Asset.account_id == account_id, Asset.asset_class == AssetClass.stocks)).scalars().all()
     price_by_symbol = {a.symbol.upper(): float(a.current_price or 0.0) for a in assets if (a.symbol or "").strip()}
 
@@ -821,7 +822,7 @@ def _funds_cost_from_assets(s, account_id: int = 1) -> float:
 def overview(account_id: int = 1, method: str = "realized") -> OverviewResponse:
     with session_scope() as s:
         trades = s.execute(select(Trade).where(Trade.account_id == account_id).order_by(Trade.entry_date.asc())).scalars().all()
-        holdings = _compute_holdings(s, account_id)
+        holdings = _compute_holdings(s, account_id, trades=trades)
         txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
         end_day = datetime.now(UTC).date()
 
@@ -1322,59 +1323,61 @@ def update_trade(trade_id: int, payload: TradeUpdate) -> TradeRead:
             st_objs = s.execute(select(Strategy).where(Strategy.id.in_(strategy_ids))).scalars().all()
             t.strategies = st_objs
 
+        # Cash-affecting fields: any change requires rebuilding linked cash txs.
+        cash_fields = {"entry_price", "position_size", "fees", "exit_price", "exit_fees", "entry_date", "exit_date"}
+        cash_changed = bool(cash_fields & data.keys())
+
         for k, v in data.items():
             setattr(t, k, v)
 
-        # Delete ALL cash transactions linked to this trade and recreate from scratch.
-        # This is the cleanest approach — avoids any delta drift in the liquidation curve.
-        s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
-        s.flush()
+        if cash_changed:
+            s.execute(delete(CashTransaction).where(CashTransaction.trade_id == trade_id))
+            s.flush()
 
         account_id = t.account_id
 
-        # Entry buy + entry fees
-        if t.position_size and t.entry_price:
-            _add_cash_tx(
-                s,
-                account_id=account_id,
-                amount=-(float(t.entry_price) * float(t.position_size)),
-                tx_type=CashTxType.trade_buy,
-                at=t.entry_date,
-                note="Trade entry (buy)",
-                trade=t,
-            )
-        if t.fees and float(t.fees) != 0.0:
-            _add_cash_tx(
-                s,
-                account_id=account_id,
-                amount=-float(t.fees),
-                tx_type=CashTxType.fee,
-                at=t.entry_date,
-                note="Trade fees",
-                trade=t,
-            )
-
-        # Exit sell + exit fees (only if closed)
-        if t.exit_price is not None:
-            _add_cash_tx(
-                s,
-                account_id=account_id,
-                amount=float(t.exit_price) * float(t.position_size or 0.0),
-                tx_type=CashTxType.trade_sell,
-                at=t.exit_date or datetime.now(UTC),
-                note="Trade exit (sell)",
-                trade=t,
-            )
-            if t.exit_fees and float(t.exit_fees) > 0.0:
+        if cash_changed:
+            if t.position_size and t.entry_price:
                 _add_cash_tx(
                     s,
                     account_id=account_id,
-                    amount=-float(t.exit_fees),
-                    tx_type=CashTxType.fee,
-                    at=t.exit_date or datetime.now(UTC),
-                    note="Trade exit (fees)",
+                    amount=-(float(t.entry_price) * float(t.position_size)),
+                    tx_type=CashTxType.trade_buy,
+                    at=t.entry_date,
+                    note="Trade entry (buy)",
                     trade=t,
                 )
+            if t.fees and float(t.fees) != 0.0:
+                _add_cash_tx(
+                    s,
+                    account_id=account_id,
+                    amount=-float(t.fees),
+                    tx_type=CashTxType.fee,
+                    at=t.entry_date,
+                    note="Trade fees",
+                    trade=t,
+                )
+
+            if t.exit_price is not None:
+                _add_cash_tx(
+                    s,
+                    account_id=account_id,
+                    amount=float(t.exit_price) * float(t.position_size or 0.0),
+                    tx_type=CashTxType.trade_sell,
+                    at=t.exit_date or datetime.now(UTC),
+                    note="Trade exit (sell)",
+                    trade=t,
+                )
+                if t.exit_fees and float(t.exit_fees) > 0.0:
+                    _add_cash_tx(
+                        s,
+                        account_id=account_id,
+                        amount=-float(t.exit_fees),
+                        tx_type=CashTxType.fee,
+                        at=t.exit_date or datetime.now(UTC),
+                        note="Trade exit (fees)",
+                        trade=t,
+                    )
 
         s.add(t)
         s.flush()
@@ -1491,6 +1494,50 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     lessons_learned=(row.get("lessons_learned") or "").strip() or None,
                 )
                 s.add(t)
+                s.flush()
+
+                position_size = float(t.position_size or 0.0)
+                if position_size and entry_price:
+                    _add_cash_tx(
+                        s,
+                        account_id=account_id,
+                        amount=-(float(entry_price) * position_size),
+                        tx_type=CashTxType.trade_buy,
+                        at=entry_date,
+                        note="Trade entry (buy) [CSV import]",
+                        trade=t,
+                    )
+                if t.fees and float(t.fees) != 0.0:
+                    _add_cash_tx(
+                        s,
+                        account_id=account_id,
+                        amount=-float(t.fees),
+                        tx_type=CashTxType.fee,
+                        at=entry_date,
+                        note="Trade fees [CSV import]",
+                        trade=t,
+                    )
+                if t.exit_price is not None:
+                    _add_cash_tx(
+                        s,
+                        account_id=account_id,
+                        amount=float(t.exit_price) * position_size,
+                        tx_type=CashTxType.trade_sell,
+                        at=t.exit_date or datetime.now(UTC),
+                        note="Trade exit (sell) [CSV import]",
+                        trade=t,
+                    )
+                    if t.exit_fees and float(t.exit_fees) > 0.0:
+                        _add_cash_tx(
+                            s,
+                            account_id=account_id,
+                            amount=-float(t.exit_fees),
+                            tx_type=CashTxType.fee,
+                            at=t.exit_date or datetime.now(UTC),
+                            note="Trade exit (fees) [CSV import]",
+                            trade=t,
+                        )
+
                 inserted += 1
             except Exception as e:
                 errors.append({"row": i, "error": str(e)})

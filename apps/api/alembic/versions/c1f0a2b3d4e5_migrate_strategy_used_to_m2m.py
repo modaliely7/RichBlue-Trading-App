@@ -6,6 +6,7 @@ Create Date: 2026-06-05 06:00:00.000000
 
 """
 from typing import Sequence, Union
+from datetime import datetime, UTC
 
 from alembic import op
 import sqlalchemy as sa
@@ -46,8 +47,9 @@ def upgrade() -> None:
             strategy_id = existing[0]
         else:
             result = conn.execute(sa.text(
-                "INSERT INTO strategies (account_id, name) VALUES (:acc, :n)"
-            ), {"acc": account_id, "n": clean})
+                "INSERT INTO strategies (account_id, name, created_at) "
+                "VALUES (:acc, :n, :ts)"
+            ), {"acc": account_id, "n": clean, "ts": datetime.now(UTC).isoformat()})
             strategy_id = result.lastrowid
 
         conn.execute(sa.text(
