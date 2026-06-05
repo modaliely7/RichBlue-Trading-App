@@ -10,3 +10,5 @@ __pycache__
 *.spec.bak
 scripts/.app.pid
 scripts/.app.log
+.playwright-mcp/
+Resources/
