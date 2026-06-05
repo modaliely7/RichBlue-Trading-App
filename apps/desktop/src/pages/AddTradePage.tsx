@@ -477,7 +477,6 @@ export function AddTradePage() {
                     stop_loss: slPx || null,
                     take_profit: tpPx || null,
                     position_size: sizeNum,
-                    strategy_used: null,
                     strategy_ids: selectedStrategyIds,
                     indicators_used: indicatorsUsed.trim() || null,
                     entry_date: new Date(entryDateLocal).toISOString(),

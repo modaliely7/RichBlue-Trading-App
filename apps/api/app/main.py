@@ -4,6 +4,7 @@ import csv
 import io
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
 
@@ -90,7 +91,35 @@ from .schemas import (
 )
 from .symbol_lookup import lookup_symbol
 
-app = FastAPI(title="Trading Journal API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from .db import engine as _engine
+    Base.metadata.create_all(bind=_engine)
+    obsolete_tables = [
+        "stock_raw_data",
+        "stock_metrics",
+        "smart_money_signals",
+        "technical_metrics",
+        "quantitative_metrics",
+        "stock_scores",
+        "symbol_mappings",
+    ]
+    try:
+        from sqlalchemy import inspect, text
+        insp = inspect(_engine)
+        existing = set(insp.get_table_names())
+        with _engine.begin() as conn:
+            for tbl in obsolete_tables:
+                if tbl in existing:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
+                    logger.info("Dropped obsolete table: %s", tbl)
+    except Exception as e:
+        logger.debug("Table cleanup skipped: %s", e)
+    yield
+
+
+app = FastAPI(title="Trading Journal API", version="0.1.0", lifespan=lifespan)
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +137,8 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-_API_DATA_BASE = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+_API_DATA_BASE = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")))
+_API_DATA_BASE.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_API_DATA_BASE)), name="static")
 
 
@@ -133,7 +163,6 @@ def _to_trade_read(t: Trade) -> TradeRead:
         stop_loss=t.stop_loss,
         take_profit=t.take_profit,
         position_size=t.position_size,
-        strategy_used=t.strategy_used,
         indicators_used=t.indicators_used,
         entry_date=t.entry_date,
         exit_date=t.exit_date,
@@ -299,7 +328,7 @@ def performance_analytics(account_id: int = 1, start: str | None = None, end: st
                 # Handle Z or +00:00 then strip tzinfo to avoid naive/aware mismatch
                 dt = datetime.fromisoformat(x.replace("Z", "+00:00"))
                 return dt.replace(tzinfo=None)
-            except:
+            except Exception:
                 return None
 
         start_dt = parse_iso(start)
@@ -492,7 +521,8 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
             if not x: return None
             try:
                 return datetime.fromisoformat(x.replace("Z", "+00:00")).replace(tzinfo=None)
-            except: return None
+            except Exception:
+                return None
             
         s_dt = parse_iso_naive(start)
         e_dt = parse_iso_naive(end)
@@ -542,7 +572,7 @@ def performance_report_pdf(account_id: int = 1, start: str | None = None, end: s
                     t.setStyle(TableStyle([('TEXTCOLOR', (3, i), (3, i), colors.HexColor("#10b981"))]))
                 elif pnl_val < 0:
                     t.setStyle(TableStyle([('TEXTCOLOR', (3, i), (3, i), colors.HexColor("#f43f5e"))]))
-            except:
+            except Exception:
                 pass
 
         elements.append(t)
@@ -1452,7 +1482,6 @@ async def import_trades_csv(file: UploadFile = File(...), account_id: int = 1) -
                     stop_loss=_parse_float(row.get("stop_loss")),
                     take_profit=_parse_float(row.get("take_profit")),
                     position_size=_parse_float(row.get("position_size")) or 0.0,
-                    strategy_used=(row.get("strategy_used") or "").strip() or None,
                     indicators_used=(row.get("indicators_used") or "").strip() or None,
                     entry_date=entry_date,
                     exit_date=_parse_dt(row.get("exit_date")),
@@ -1484,7 +1513,6 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                 "stop_loss",
                 "take_profit",
                 "position_size",
-                "strategy_used",
                 "indicators_used",
                 "entry_date",
                 "exit_date",
@@ -1516,7 +1544,6 @@ def export_trades_csv(account_id: int = 1) -> StreamingResponse:
                         t.stop_loss if t.stop_loss is not None else "",
                         t.take_profit if t.take_profit is not None else "",
                         t.position_size,
-                        t.strategy_used or "",
                         t.indicators_used or "",
                         t.entry_date.isoformat(),
                         t.exit_date.isoformat() if t.exit_date else "",
@@ -1590,7 +1617,7 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
         if isinstance(s, datetime): return s
         try:
             return datetime.fromisoformat(s.replace("Z", "+00:00"))
-        except:
+        except Exception:
             return None
 
     with session_scope() as s:
@@ -1844,36 +1871,6 @@ def psychology_summary(account_id: int = 1) -> list[PsychologySummaryRow]:
         return rows
 
 
-@app.on_event("startup")
-def startup_event():
-    # Ensure all tables exist (idempotent — safe to run every startup)
-    from .db import engine as _engine
-    Base.metadata.create_all(bind=_engine)
-
-    # Drop obsolete analysis tables left over from pre-journaling-only builds.
-    # These are safe to drop — we no longer read or write to them.
-    obsolete_tables = [
-        "stock_raw_data",
-        "stock_metrics",
-        "smart_money_signals",
-        "technical_metrics",
-        "quantitative_metrics",
-        "stock_scores",
-        "symbol_mappings",
-    ]
-    try:
-        from sqlalchemy import inspect, text
-        insp = inspect(_engine)
-        existing = set(insp.get_table_names())
-        with _engine.begin() as conn:
-            for tbl in obsolete_tables:
-                if tbl in existing:
-                    conn.execute(text(f"DROP TABLE IF EXISTS {tbl}"))
-                    logger.info("Dropped obsolete table: %s", tbl)
-    except Exception as e:
-        logger.debug("Table cleanup skipped: %s", e)
-
-
 @app.get("/insights")
 def insights(account_id: int = 1) -> dict:
     """
@@ -1916,7 +1913,8 @@ def insights(account_id: int = 1) -> dict:
         # Strategy performance
         by_strategy: dict[str, list[float]] = {}
         for t in closed:
-            key = (t.strategy_used or "").strip() or "Unspecified"
+            names = [s.name for s in (t.strategies or [])]
+            key = ", ".join(names) if names else "Unspecified"
             by_strategy.setdefault(key, []).append(calc_pnl(t) or 0.0)
         strat_rows = []
         for k, pnls in by_strategy.items():
@@ -2176,9 +2174,9 @@ def delete_asset(asset_id: int) -> dict:
 
 
 @app.get("/portfolio/summary", response_model=PortfolioSummary)
-def portfolio_summary() -> PortfolioSummary:
+def portfolio_summary(account_id: int = 1) -> PortfolioSummary:
     with session_scope() as s:
-        assets = s.execute(select(Asset)).scalars().all()
+        assets = s.execute(select(Asset).where(Asset.account_id == account_id)).scalars().all()
         total = 0.0
         alloc: dict[str, float] = {c.value: 0.0 for c in AssetClass}
         for a in assets:
@@ -2189,13 +2187,13 @@ def portfolio_summary() -> PortfolioSummary:
 
 
 @app.get("/portfolio/holdings", response_model=list[HoldingRow])
-def portfolio_holdings() -> list[HoldingRow]:
+def portfolio_holdings(account_id: int = 1) -> list[HoldingRow]:
     """
     Positions by symbol from logged trades (open quantities/cost, closed realized PnL).
     Current prices come from the Assets table when present (Stocks, matched by symbol).
     """
     with session_scope() as s:
-        return _compute_holdings(s)
+        return _compute_holdings(s, account_id)
 
 
 # --- New Analysis Endpoints ---

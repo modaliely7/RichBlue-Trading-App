@@ -186,7 +186,6 @@ export type Trade = {
   stop_loss: number | null
   take_profit: number | null
   position_size: number
-  strategy_used: string | null
   indicators_used: string | null
   entry_date: string
   exit_date: string | null
@@ -223,7 +222,6 @@ export type TradeUpdate = Partial<
     | 'stop_loss'
     | 'take_profit'
     | 'position_size'
-    | 'strategy_used'
     | 'indicators_used'
     | 'entry_date'
     | 'exit_date'

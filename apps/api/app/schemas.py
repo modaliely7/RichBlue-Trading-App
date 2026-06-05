@@ -58,7 +58,6 @@ class TradeBase(BaseModel):
     take_profit: float | None = None
     position_size: float = 0.0
 
-    strategy_used: str | None = Field(default=None, max_length=64)
     indicators_used: str | None = Field(default=None, max_length=256)
 
     entry_date: datetime
@@ -84,7 +83,6 @@ class TradeUpdate(BaseModel):
     take_profit: float | None = None
     position_size: float | None = None
 
-    strategy_used: str | None = Field(default=None, max_length=64)
     indicators_used: str | None = Field(default=None, max_length=256)
 
     entry_date: datetime | None = None

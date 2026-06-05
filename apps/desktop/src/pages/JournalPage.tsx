@@ -58,7 +58,6 @@ type TradeDraft = {
   position_size: string
   fees: string
   exit_fees: string
-  strategy_used: string
   entry_date: string
   exit_date: string
   notes: string
@@ -76,7 +75,6 @@ function tradeToDraft(t: Trade): TradeDraft {
     position_size: t.position_size === 0 ? '' : String(t.position_size),
     fees: t.fees === 0 ? '' : String(t.fees),
     exit_fees: (t.exit_fees ?? 0) === 0 ? '' : String(t.exit_fees ?? 0),
-    strategy_used: t.strategy_used ?? '',
     entry_date: toDatetimeLocalValue(t.entry_date),
     exit_date: t.exit_date ? toDatetimeLocalValue(t.exit_date) : '',
     notes: t.notes || '',

@@ -67,7 +67,6 @@ class Trade(Base):
     take_profit: Mapped[float | None] = mapped_column(Float, nullable=True)
     position_size: Mapped[float] = mapped_column(Float, default=0.0)
 
-    strategy_used: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     indicators_used: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     strategies: Mapped[list[Strategy]] = relationship(
