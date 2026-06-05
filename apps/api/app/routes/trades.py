@@ -49,7 +49,7 @@ def list_trades(account_id: int = 1, limit: int = 200, offset: int = 0) -> list[
         rows = s.execute(
             select(Trade)
             .where(Trade.account_id == account_id)
-            .options(selectinload(Trade.strategies))
+            .options(selectinload(Trade.strategies), selectinload(Trade.playbook), selectinload(Trade.playbook_setup))
             .order_by(Trade.entry_date.desc())
             .limit(limit)
             .offset(offset)

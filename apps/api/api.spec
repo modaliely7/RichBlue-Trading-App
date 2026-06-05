@@ -88,6 +88,7 @@ hidden_imports = [
     "app.routes.analytics",
     "app.routes.reports",
     "app.routes.settings",
+    "app.routes.playbooks",
     "app.routes.market_data",
 ]
 

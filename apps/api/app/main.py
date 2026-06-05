@@ -26,6 +26,7 @@ from .routes import (
     lessons,
     market_data,
     overview,
+    playbooks,
     portfolio,
     psychology,
     reports,
@@ -141,6 +142,7 @@ app.mount("/static", StaticFiles(directory=str(_API_DATA_BASE)), name="static")
 # @router.* decorator is what determines the URL.
 app.include_router(health_accounts.router)
 app.include_router(strategies.router)
+app.include_router(playbooks.router)
 app.include_router(assets.router)
 app.include_router(symbols.router)
 app.include_router(trades.router)

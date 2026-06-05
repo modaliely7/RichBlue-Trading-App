@@ -91,6 +91,17 @@ class Trade(Base):
 
     screenshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    pre_trade_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pre_trade_emotion: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    r_plan: Mapped[float | None] = mapped_column(Float, nullable=True)
+    process_grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    r_multiple_grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    playbook_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("playbooks.id"), nullable=True, index=True)
+    playbook_setup_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("playbook_setups.id"), nullable=True, index=True)
+
+    playbook: Mapped["Playbook | None"] = relationship("Playbook", foreign_keys=[playbook_id])
+    playbook_setup: Mapped["PlaybookSetup | None"] = relationship("PlaybookSetup", foreign_keys=[playbook_setup_id])
+
 
 class PsychologyState(str, enum.Enum):
     confident = "Confident"
@@ -239,5 +250,40 @@ class CashTransaction(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class Playbook(Base):
+    __tablename__ = "playbooks"
+    __table_args__ = (UniqueConstraint("account_id", "name", name="uq_playbook_name"),)
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"), index=True, default=1)
+    name: Mapped[str] = mapped_column(String(64), index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    setups: Mapped[list["PlaybookSetup"]] = relationship(
+        "PlaybookSetup",
+        back_populates="playbook",
+        cascade="all, delete-orphan",
+        order_by="PlaybookSetup.order_index",
+    )
+
+
+class PlaybookSetup(Base):
+    __tablename__ = "playbook_setups"
+    __table_args__ = (UniqueConstraint("playbook_id", "name", name="uq_playbook_setup_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    playbook_id: Mapped[int] = mapped_column(Integer, ForeignKey("playbooks.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(64), index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entry_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exit_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    playbook: Mapped[Playbook] = relationship("Playbook", back_populates="setups")
 

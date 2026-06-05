@@ -68,6 +68,14 @@ class TradeBase(BaseModel):
     notes: str | None = None
     lessons_learned: str | None = None
 
+    pre_trade_plan: str | None = None
+    pre_trade_emotion: str | None = Field(default=None, max_length=32)
+    r_plan: float | None = None
+    process_grade: int | None = Field(default=None, ge=1, le=5)
+    r_multiple_grade: int | None = Field(default=None, ge=1, le=5)
+    playbook_id: int | None = None
+    playbook_setup_id: int | None = None
+
 
 class TradeCreate(TradeBase):
     strategy_ids: list[int] | None = None
@@ -94,6 +102,14 @@ class TradeUpdate(BaseModel):
     lessons_learned: str | None = None
     strategy_ids: list[int] | None = None
 
+    pre_trade_plan: str | None = None
+    pre_trade_emotion: str | None = Field(default=None, max_length=32)
+    r_plan: float | None = None
+    process_grade: int | None = Field(default=None, ge=1, le=5)
+    r_multiple_grade: int | None = Field(default=None, ge=1, le=5)
+    playbook_id: int | None = None
+    playbook_setup_id: int | None = None
+
 
 class TradeRead(TradeBase):
     id: int
@@ -102,8 +118,11 @@ class TradeRead(TradeBase):
     pnl: float | None = None
     return_pct: float | None = None
     risk_reward: float | None = None
+    r_multiple_actual: float | None = None
     duration_seconds: int | None = None
     strategies: list[StrategyRead] = []
+    playbook_name: str | None = None
+    playbook_setup_name: str | None = None
 
 
 class PsychologyBase(BaseModel):
@@ -435,4 +454,64 @@ class EodScheduleUpdate(BaseModel):
     eod_minute: int | None = Field(default=None, ge=0, le=59)
     timezone: str | None = Field(default=None, max_length=64)
     is_active: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Playbook (Phase 7)
+# ---------------------------------------------------------------------------
+
+
+class PlaybookSetupBase(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str | None = None
+    entry_rules: str | None = None
+    exit_rules: str | None = None
+    image_path: str | None = Field(default=None, max_length=512)
+    order_index: int = 0
+
+
+class PlaybookSetupCreate(PlaybookSetupBase):
+    pass
+
+
+class PlaybookSetupUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = None
+    entry_rules: str | None = None
+    exit_rules: str | None = None
+    image_path: str | None = Field(default=None, max_length=512)
+    order_index: int | None = None
+
+
+class PlaybookSetupRead(PlaybookSetupBase):
+    id: int
+    playbook_id: int
+    created_at: datetime
+
+
+class PlaybookBase(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str | None = None
+    color: str | None = Field(default=None, max_length=16)
+    is_active: bool = True
+
+
+class PlaybookCreate(PlaybookBase):
+    pass
+
+
+class PlaybookUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = None
+    color: str | None = Field(default=None, max_length=16)
+    is_active: bool | None = None
+
+
+class PlaybookRead(PlaybookBase):
+    id: int
+    account_id: int
+    created_at: datetime
+    updated_at: datetime
+    setup_count: int = 0
+    setups: list[PlaybookSetupRead] = []
 

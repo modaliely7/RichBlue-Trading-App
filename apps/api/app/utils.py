@@ -55,6 +55,20 @@ def to_strategy_read(s: Strategy) -> StrategyRead:
 
 def to_trade_read(t: Trade) -> TradeRead:
     pnl = calc_pnl(t)
+    r_actual: float | None = None
+    if t.exit_price is not None and t.stop_loss and t.entry_price and t.position_size:
+        risk_per_share = abs(float(t.entry_price) - float(t.stop_loss))
+        if risk_per_share > 0:
+            r_actual = (float(pnl or 0.0)) / (risk_per_share * float(t.position_size))
+
+    def _safe_name(rel) -> str | None:
+        try:
+            if rel is None:
+                return None
+            return rel.name
+        except Exception:
+            return None
+
     return TradeRead(
         id=t.id,
         symbol=t.symbol,
@@ -75,8 +89,18 @@ def to_trade_read(t: Trade) -> TradeRead:
         pnl=pnl,
         return_pct=calc_return_pct(t),
         risk_reward=calc_risk_reward(t),
+        r_multiple_actual=r_actual,
         duration_seconds=calc_duration_seconds(t.entry_date, t.exit_date),
         strategies=[to_strategy_read(s) for s in {s.id: s for s in t.strategies}.values()],
+        pre_trade_plan=t.pre_trade_plan,
+        pre_trade_emotion=t.pre_trade_emotion,
+        r_plan=t.r_plan,
+        process_grade=t.process_grade,
+        r_multiple_grade=t.r_multiple_grade,
+        playbook_id=t.playbook_id,
+        playbook_setup_id=t.playbook_setup_id,
+        playbook_name=_safe_name(t.playbook) if t.playbook_id else None,
+        playbook_setup_name=_safe_name(t.playbook_setup) if t.playbook_setup_id else None,
     )
 
 
