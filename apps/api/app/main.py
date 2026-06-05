@@ -20,7 +20,6 @@ import bisect
 
 import numpy as np
 import pandas as pd
-print(f"DEBUG: pandas imported as pd: {pd}")
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
@@ -90,7 +89,6 @@ from .schemas import (
     StrategyUpdate,
 )
 from .symbol_lookup import lookup_symbol
-import json
 
 app = FastAPI(title="Trading Journal API", version="0.1.0")
 
@@ -103,7 +101,6 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
-        "*"
     ],
     allow_credentials=False,
     allow_methods=["*"],
@@ -160,7 +157,7 @@ def tx_at_date(at: datetime | date) -> date:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "ts": datetime.utcnow().isoformat()}
+    return {"ok": True, "ts": datetime.now(UTC).isoformat()}
 
 
 # --- ACCOUNTS ---
@@ -1068,7 +1065,7 @@ def add_trade_dividend(trade_id: int, payload: DividendRequest, account_id: int 
         if not trade:
             raise HTTPException(status_code=404, detail="Trade not found")
         
-        at = payload.at or datetime.utcnow()
+        at = payload.at or datetime.now(UTC)
         note = payload.note or f"Dividend for {trade.symbol}"
         
         if payload.is_stock_dividend:
@@ -1125,42 +1122,6 @@ def cash_transactions(account_id: int = 1, limit: int = 300, offset: int = 0) ->
             )
             for r in rows
         ]
-
-
-@app.options("/cash/deposit")
-def cash_deposit_options() -> Response:
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-    )
-
-
-@app.options("/cash/withdraw")
-def cash_withdraw_options() -> Response:
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-    )
-
-
-@app.options("/cash/adjust")
-def cash_adjust_options() -> Response:
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-    )
 
 
 @app.post("/cash/deposit")
@@ -1584,7 +1545,7 @@ def backup_dataset(account_id: int = 1) -> dict:
         cash_txs = s.execute(select(CashTransaction).where(CashTransaction.account_id == account_id).order_by(CashTransaction.at.asc())).scalars().all()
         strategies = s.execute(select(Strategy).where(Strategy.account_id == account_id)).scalars().all()
         payload = {
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "strategies": [_to_strategy_read(s).model_dump() for s in strategies],
             "trades": [_to_trade_read(t).model_dump() for t in trades],
             "assets": [_to_asset_read(a).model_dump() for a in assets],
@@ -1684,7 +1645,7 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
             a_data.pop("id", None)
             for extra in ["market_value", "cost_basis", "unrealized_pnl", "unrealized_pnl_pct", "created_at", "updated_at"]:
                 a_data.pop(extra, None)
-            a_data["updated_at"] = parse_dt(a_data.get("updated_at")) or datetime.utcnow()
+            a_data["updated_at"] = parse_dt(a_data.get("updated_at")) or datetime.now(UTC)
             s.add(Asset(**a_data, account_id=account_id))
 
         # 3. Restore Cash Transactions
@@ -1695,7 +1656,7 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
                 c_data["trade_id"] = old_to_new_trade_id[old_tid]
             else:
                 c_data["trade_id"] = None
-            c_data["at"] = parse_dt(c_data.get("at")) or datetime.utcnow()
+            c_data["at"] = parse_dt(c_data.get("at")) or datetime.now(UTC)
             s.add(CashTransaction(**c_data, account_id=account_id))
 
         # 4. Restore Psychology
@@ -1706,7 +1667,7 @@ async def restore_dataset(file: UploadFile, account_id: int = 1):
                 p_data["trade_id"] = old_to_new_trade_id[old_tid]
             else:
                 p_data["trade_id"] = None
-            p_data["at"] = parse_dt(p_data.get("at")) or datetime.utcnow()
+            p_data["at"] = parse_dt(p_data.get("at")) or datetime.now(UTC)
             s.add(PsychologyEntry(**p_data, account_id=account_id))
 
         # 5. Restore Lessons
