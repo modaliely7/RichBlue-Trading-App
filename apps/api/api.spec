@@ -56,16 +56,28 @@ hidden_imports = [
     "alembic.operations",
     # App modules
     "app.main",
+    "app.utils",
     "app.db",
     "app.models",
     "app.schemas",
     "app.analytics",
     "app.portfolio_math",
-    "app.engine_quant",
-    "app.engine_technicals",
-    "app.data_providers",
-    "app.fundamentals",
-    "app.cli",
+    "app.symbol_lookup",
+    # Routers (S1 split)
+    "app.routes",
+    "app.routes.health_accounts",
+    "app.routes.strategies",
+    "app.routes.assets",
+    "app.routes.symbols",
+    "app.routes.trades",
+    "app.routes.cash",
+    "app.routes.portfolio",
+    "app.routes.overview",
+    "app.routes.psychology",
+    "app.routes.lessons",
+    "app.routes.analytics",
+    "app.routes.reports",
+    "app.routes.settings",
 ]
 
 # ── Data files to bundle alongside the exe ────────────────────────────────────
