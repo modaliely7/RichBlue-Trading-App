@@ -417,6 +417,16 @@ export type TradeUpdate = Partial<
   > & { strategy_ids?: number[] }
 >
 
+export type TradeClose = {
+  exit_price: number
+  exit_date: string
+  process_grade: number
+  r_multiple_grade: number
+  exit_fees?: number
+  lessons_learned?: string | null
+  notes?: string | null
+}
+
 export type CashTxType = 'Deposit' | 'Withdraw' | 'Trade Buy' | 'Trade Sell' | 'Fee' | 'Adjustment' | 'Dividend'
 
 export type CashTx = {
@@ -649,6 +659,9 @@ export const api = {
     apiFetch<{ deleted: true }>(`/playbooks/${playbookId}/setups/${setupId}`, { method: 'DELETE' }),
 
   getInsights: (accountId: number = 1) => apiFetch<InsightsResponse>(`/insights?account_id=${accountId}`),
+
+  closeTrade: (id: number, payload: TradeClose) =>
+    apiFetch<Trade>(`/trades/${id}/close`, { method: 'POST', body: JSON.stringify(payload) }),
 
   // Market data (Phase 6)
   listEgxSymbols: (query?: string, limit: number = 50) => {

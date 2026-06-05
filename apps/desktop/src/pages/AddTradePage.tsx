@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ShieldCheck, Ruler } from 'lucide-react'
+import { ShieldCheck, Ruler, CheckCircle2 } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, type OverviewResponse, type Strategy, type Playbook, type PlaybookSetup } from '../lib/api'
 import type { Market, TradeCreate } from '../lib/api'
@@ -76,6 +76,8 @@ export function AddTradePage() {
   const [isDetecting, setIsDetecting] = useState(false)
   const [detectedName, setDetectedName] = useState<string | null>(null)
   const [isAutoFees, setIsAutoFees] = useState(true)
+  const [processGrade, setProcessGrade] = useState<number | null>(null)
+  const [rMultipleGrade, setRMultipleGrade] = useState<number | null>(null)
 
   const defaultEntry = useMemo(() => toDatetimeLocalValue(new Date().toISOString()), [])
   const [entryDateLocal, setEntryDateLocal] = useState(defaultEntry)
@@ -188,7 +190,7 @@ export function AddTradePage() {
   const requiredCash = (entryPx * sizeNum) + feesNum
   const cashAvailable = Number(ov?.kpis.cash_balance ?? 0)
   const cashOk = cashAvailable >= requiredCash
-  const canCreate = symbol.trim() && entryPx > 0 && sizeNum > 0
+  const canCreate = symbol.trim() && entryPx > 0 && sizeNum > 0 && (!hasExitOnCreate || (processGrade != null && rMultipleGrade != null))
 
   const riskPerShare = entryPx > 0 && slPx > 0 ? Math.abs(entryPx - slPx) : 0
   const rewardPerShare = entryPx > 0 && tpPx > 0 ? Math.abs(tpPx - entryPx) : 0
@@ -413,6 +415,56 @@ export function AddTradePage() {
                   placeholder="Why this setup? What's the entry, stop, target?"
                 />
               </label>
+
+              {hasExitOnCreate && (
+                <>
+                  <div className="span4" style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                    <div className="label" style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <CheckCircle2 size={14} style={{ color: 'var(--good, #10b981)' }} />
+                      Post-Trade Review <span style={{ color: 'var(--bad, #f43f5e)' }}>*</span>
+                    </div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                      Closing this trade locks it forever — these grades are required.
+                    </div>
+                  </div>
+
+                  <label className="span2">
+                    <div className="label">Process grade (1-5) <span style={{ color: 'var(--bad, #f43f5e)' }}>*</span></div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setProcessGrade(processGrade === n ? null : n)}
+                          className="gradeStar"
+                          data-filled={processGrade != null && n <= processGrade}
+                          aria-label={`Set process grade ${n}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+
+                  <label className="span2">
+                    <div className="label">R-multiple grade (1-5) <span style={{ color: 'var(--bad, #f43f5e)' }}>*</span></div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setRMultipleGrade(rMultipleGrade === n ? null : n)}
+                          className="gradeStar"
+                          data-filled={rMultipleGrade != null && n <= rMultipleGrade}
+                          aria-label={`Set R-multiple grade ${n}`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -578,6 +630,8 @@ export function AddTradePage() {
                     r_plan: rPlan.trim() === '' ? null : parseFloat(rPlan),
                     playbook_id: playbookId === '' ? null : playbookId,
                     playbook_setup_id: setupId === '' ? null : setupId,
+                    process_grade: hasExitOnCreate ? processGrade : null,
+                    r_multiple_grade: hasExitOnCreate ? rMultipleGrade : null,
                   })
                 }}
               >

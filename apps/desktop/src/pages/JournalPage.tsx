@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Plus, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { OverviewSyncBar } from '../components/OverviewSyncBar'
 import { api, tradeScreenshotPublicUrl, type OverviewResponse, type Playbook, type PlaybookSetup } from '../lib/api'
 import type { Market, Trade, TradeUpdate } from '../lib/api'
@@ -189,6 +189,144 @@ function DividendModal({
   )
 }
 
+function CloseTradeModal({ trade, onClose }: { trade: Trade; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [exitPriceStr, setExitPriceStr] = useState('')
+  const [exitDateLocal, setExitDateLocal] = useState(() => toDatetimeLocalValue(new Date().toISOString()))
+  const [exitFees, setExitFees] = useState('')
+  const [processGrade, setProcessGrade] = useState<number | null>(null)
+  const [rMultipleGrade, setRMultipleGrade] = useState<number | null>(null)
+  const [lessonsLearned, setLessonsLearned] = useState('')
+  const [notes, setNotes] = useState(trade.notes || '')
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const exitPrice = parseDecimal(exitPriceStr)
+      if (!Number.isFinite(exitPrice) || exitPrice <= 0) {
+        throw new Error('Exit price must be a positive number')
+      }
+      if (processGrade == null || rMultipleGrade == null) {
+        throw new Error('Process grade and R-multiple grade are required')
+      }
+      return api.closeTrade(trade.id, {
+        exit_price: exitPrice,
+        exit_date: new Date(exitDateLocal).toISOString(),
+        process_grade: processGrade,
+        r_multiple_grade: rMultipleGrade,
+        exit_fees: exitFees.trim() === '' ? 0 : parseDecimal(exitFees),
+        lessons_learned: lessonsLearned.trim() || null,
+        notes: notes.trim() || null,
+      })
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['overview'] }),
+        qc.invalidateQueries({ queryKey: ['trades'] }),
+        qc.invalidateQueries({ queryKey: ['insights'] }),
+        qc.invalidateQueries({ queryKey: ['cashBalance'] }),
+        qc.invalidateQueries({ queryKey: ['cashTransactions'] }),
+      ])
+      onClose()
+    },
+  })
+
+  const canSubmit = exitPriceStr.trim() !== '' && processGrade != null && rMultipleGrade != null
+
+  return (
+    <div className="modalOverlay" onClick={onClose}>
+      <div className="card panel dividendModal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <div className="panelTitle">Close & review trade</div>
+        <div className="muted" style={{ marginBottom: 8 }}>
+          <span className="mono">{trade.symbol}</span> · Entry <span className="mono">{formatCurrency(trade.entry_price)}</span> · Size <span className="mono">{trade.position_size}</span>
+        </div>
+        <div className="warning" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <AlertTriangle size={14} /> Once closed, this trade becomes immutable — grades and lessons are locked in.
+        </div>
+        <div className="formGrid">
+          <label>
+            <div className="label">Exit price</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={exitPriceStr}
+              onChange={e => setExitPriceStr(normalizeDecimalTyping(exitPriceStr, e.target.value))}
+              placeholder="0.00"
+              autoFocus
+            />
+          </label>
+          <label>
+            <div className="label">Exit date</div>
+            <input type="datetime-local" value={exitDateLocal} onChange={e => setExitDateLocal(e.target.value)} />
+          </label>
+          <label>
+            <div className="label">Exit fees</div>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={exitFees}
+              onChange={e => setExitFees(normalizeDecimalTyping(exitFees, e.target.value))}
+              placeholder="0.00"
+            />
+          </label>
+          <label className="span2">
+            <div className="label">Process grade <span style={{ color: 'var(--bad, #f43f5e)' }}>*</span></div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setProcessGrade(processGrade === n ? null : n)}
+                  className="gradeStar"
+                  data-filled={processGrade != null && n <= processGrade}
+                  aria-label={`Set process grade ${n}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </label>
+          <label className="span2">
+            <div className="label">R-multiple grade <span style={{ color: 'var(--bad, #f43f5e)' }}>*</span></div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setRMultipleGrade(rMultipleGrade === n ? null : n)}
+                  className="gradeStar"
+                  data-filled={rMultipleGrade != null && n <= rMultipleGrade}
+                  aria-label={`Set R-multiple grade ${n}`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </label>
+          <label className="span4">
+            <div className="label">Lessons learned</div>
+            <textarea rows={2} value={lessonsLearned} onChange={e => setLessonsLearned(e.target.value)} placeholder="What worked? What to avoid next time?" />
+          </label>
+          <label className="span4">
+            <div className="label">Notes (optional)</div>
+            <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
+          </label>
+        </div>
+        {mutation.isError && (
+          <div className="error" style={{ marginTop: 8 }}>
+            {String((mutation.error as Error).message || 'Failed to close trade')}
+          </div>
+        )}
+        <div className="detailsActions" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => mutation.mutate()} disabled={!canSubmit || mutation.isPending}>
+            {mutation.isPending ? 'Closing…' : 'Close & lock'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function JournalPage() {
   const { currentAccount } = useAccount()
   const qc = useQueryClient()
@@ -214,6 +352,7 @@ export function JournalPage() {
   const [tradeStatus, setTradeStatus] = useState<'all' | 'open' | 'closed'>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [isDividendModalOpen, setIsDividendModalOpen] = useState(false)
+  const [closeTradeId, setCloseTradeId] = useState<number | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState<TradeDraft | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -519,17 +658,35 @@ export function JournalPage() {
                     <td>{getTradeStyle(t.entry_date, t.exit_price != null ? (t.exit_date || new Date().toISOString()) : null)}</td>
                     <td>{formatDuration(t.duration_seconds)}</td>
                     <td>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={deleteMutation.isPending}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (confirm(`Delete trade #${t.id} (${t.symbol})?`)) deleteMutation.mutate(t.id)
-                        }}
-                      >
-                        Delete
-                      </Button>
+                      {t.exit_price != null ? (
+                        <span className="statusPill" style={{ background: 'var(--good-dim, rgba(16,185,129,0.12))', color: 'var(--good, #10b981)' }}>
+                          Reviewed
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCloseTradeId(t.id)
+                            }}
+                          >
+                            Close
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deleteMutation.isPending}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (confirm(`Delete trade #${t.id} (${t.symbol})?`)) deleteMutation.mutate(t.id)
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -592,7 +749,16 @@ export function JournalPage() {
                   </div>
 
                   <div className="detailsActions">
-                    <Button onClick={beginEdit}>Edit trade</Button>
+                    {selectedTrade.exit_price != null ? (
+                      <span className="statusPill" style={{ background: 'var(--good-dim, rgba(16,185,129,0.12))', color: 'var(--good, #10b981)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <CheckCircle2 size={12} /> Reviewed — immutable
+                      </span>
+                    ) : (
+                      <>
+                        <Button onClick={beginEdit}>Edit trade</Button>
+                        <Button onClick={() => setCloseTradeId(selectedTrade.id)}>Close & review</Button>
+                      </>
+                    )}
                     <label className="fileBtn">
                       <input
                         type="file"
@@ -913,6 +1079,11 @@ export function JournalPage() {
           trades={ov?.trades ?? []}
         />
       )}
+
+      {closeTradeId !== null && (() => {
+        const t = (ov?.trades ?? []).find(tr => tr.id === closeTradeId)
+        return t ? <CloseTradeModal trade={t} onClose={() => setCloseTradeId(null)} /> : null
+      })()}
     </div>
   )
 }
